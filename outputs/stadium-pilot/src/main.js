@@ -108,8 +108,8 @@ concreteTexture.wrapS = THREE.RepeatWrapping;
 concreteTexture.wrapT = THREE.RepeatWrapping;
 concreteTexture.repeat.set(5, 2);
 concreteTexture.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
-const concrete = new THREE.MeshStandardMaterial({ color: '#c4c9c4', map: concreteTexture, roughness: 1 });
-const darkConcrete = new THREE.MeshStandardMaterial({ color: '#aab3ad', map: concreteTexture, roughness: 1 });
+const concrete = new THREE.MeshStandardMaterial({ color: '#b2b7b1', map: concreteTexture, roughness: 1 });
+const darkConcrete = new THREE.MeshStandardMaterial({ color: '#99a29c', map: concreteTexture, roughness: 1 });
 const trackNormal = new THREE.TextureLoader().load('/track-normal.jpg', undefined, undefined, (error) => console.error('Не удалось загрузить фактуру дорожек', error));
 trackNormal.wrapS = THREE.RepeatWrapping;
 trackNormal.wrapT = THREE.RepeatWrapping;
@@ -171,7 +171,7 @@ const greenGeometries = greenery.map((footprint) => {
   geometry.translate(0, -0.15, 0);
   return geometry;
 });
-scene.add(new THREE.Mesh(mergeGeometries(greenGeometries), material('#657b60')));
+scene.add(new THREE.Mesh(mergeGeometries(greenGeometries), material('#4d6a45')));
 greenGeometries.forEach((geometry) => geometry.dispose());
 
 function box(width, height, depth, x, y, z, surface) {
@@ -210,7 +210,7 @@ function ring(outerWidth, outerDepth, innerWidth, innerDepth, radius, height, su
 }
 
 // Геометрия чаши и места являются ориентировочными, а не измеренным планом.
-box(850, 0.5, 850, 0, -0.5, 0, material('#a2ae9c'));
+box(850, 0.5, 850, 0, -0.5, 0, material('#7d8873'));
 box(105, 0.12, 68, 0, 0, 0, grass);
 const mowingShade = new THREE.MeshBasicMaterial({ color: '#1c452c', transparent: true, opacity: 0.12, depthWrite: false });
 for (let strip = 0; strip < 5; strip += 1) {
