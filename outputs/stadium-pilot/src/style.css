@@ -128,3 +128,6 @@ button { cursor: pointer; }
   .booking-open .time-toggle { top: 64px; }
   .hint { bottom: calc(46svh + 10px); }
 }
+
+.seat-tip { position: fixed; z-index: 4; padding: 6px 10px; border-radius: 6px; background: var(--ink); color: #fff; font-size: 13px; pointer-events: none; white-space: nowrap; }
+.seat-tip[hidden] { display: none; }

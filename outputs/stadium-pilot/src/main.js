@@ -1239,6 +1239,39 @@ canvas.addEventListener('pointerup', (event) => {
   renderStage();
 
 });
+// Подсказка при наведении на место в режиме сектора: ряд и номер, курсор-«рука».
+const seatTip = document.createElement('div');
+seatTip.className = 'seat-tip';
+seatTip.hidden = true;
+document.querySelector('#app').appendChild(seatTip);
+const hoverRaycaster = new THREE.Raycaster();
+const hoverPointer = new THREE.Vector2();
+let hoverFrame = 0;
+canvas.addEventListener('pointermove', (event) => {
+  if (dragging || cameraTransition || !bookingOpen || view === 'seat' || stage === 'stand' || event.pointerType === 'touch') {
+    if (!seatTip.hidden) { seatTip.hidden = true; canvas.style.cursor = ''; }
+    return;
+  }
+  const now = performance.now();
+  if (now - hoverFrame < 40) return;
+  hoverFrame = now;
+  const bounds = canvas.getBoundingClientRect();
+  hoverPointer.set((event.clientX - bounds.left) / bounds.width * 2 - 1, -(event.clientY - bounds.top) / bounds.height * 2 + 1);
+  hoverRaycaster.setFromCamera(hoverPointer, camera);
+  const hit = hoverRaycaster.intersectObject(seatHits)[0];
+  const seat = hit && seats[hit.instanceId];
+  if (!seat || seat.hidden) {
+    seatTip.hidden = true;
+    canvas.style.cursor = '';
+    return;
+  }
+  seatTip.textContent = `Ряд ${seat.row} · место ${seat.number}`;
+  seatTip.style.left = `${event.clientX + 14}px`;
+  seatTip.style.top = `${event.clientY + 14}px`;
+  seatTip.hidden = false;
+  canvas.style.cursor = 'pointer';
+});
+canvas.addEventListener('pointerleave', () => { seatTip.hidden = true; });
 canvas.addEventListener('pointercancel', () => { dragging = false; });
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
