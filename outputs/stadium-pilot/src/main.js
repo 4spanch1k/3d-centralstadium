@@ -1407,6 +1407,8 @@ if (location.search.includes('debug')) window.__debug = { renderer, scene, camer
 // Эффект затенения в контактах: только на компьютерах и только в близких видах (сектор, место); ?fx=0 отключает.
 let composer;
 let aoCamera;
+let bloomPass;
+let eveningMode = false;
 if (!lowPower && new URLSearchParams(location.search).get('fx') !== '0') {
   // Модули постобработки подгружаются отдельно и только на компьютерах: телефонам они не нужны.
   Promise.all([
@@ -1414,7 +1416,8 @@ if (!lowPower && new URLSearchParams(location.search).get('fx') !== '0') {
     import('three/addons/postprocessing/RenderPass.js'),
     import('three/addons/postprocessing/GTAOPass.js'),
     import('three/addons/postprocessing/OutputPass.js'),
-  ]).then(([{ EffectComposer }, { RenderPass }, { GTAOPass }, { OutputPass }]) => {
+    import('three/addons/postprocessing/UnrealBloomPass.js'),
+  ]).then(([{ EffectComposer }, { RenderPass }, { GTAOPass }, { OutputPass }, { UnrealBloomPass }]) => {
     const size = renderer.getDrawingBufferSize(new THREE.Vector2());
     const target = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 4 });
     const instance = new EffectComposer(renderer, target);
@@ -1425,6 +1428,10 @@ if (!lowPower && new URLSearchParams(location.search).get('fx') !== '0') {
     ao.updateGtaoMaterial({ radius: 0.9, distanceExponent: 1.4, thickness: 1.2, scale: 1.1, samples: 12 });
     ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 8 });
     instance.addPass(ao);
+    // Свечение ламп, светодиодных лент и табло: только вечером и только на компьютерах.
+    bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.65, 0.55, 0.88);
+    bloomPass.enabled = eveningMode;
+    instance.addPass(bloomPass);
     instance.addPass(new OutputPass());
     instance.setPixelRatio(pixelRatio);
     instance.setSize(window.innerWidth, window.innerHeight);
@@ -1591,6 +1598,8 @@ renderer.setAnimationLoop(() => {
     scene.environmentIntensity = preset.env;
     scene.backgroundIntensity = preset.backdrop;
     floodlights.material.emissiveIntensity = preset.lamps;
+    eveningMode = mode === 'evening';
+    if (bloomPass) bloomPass.enabled = eveningMode;
     glow.visible = mode === 'evening';
     glow.material.opacity = mode === 'evening' ? 0.85 : 0;
     renderer.shadowMap.needsUpdate = true;
