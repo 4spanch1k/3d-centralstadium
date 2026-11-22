@@ -620,6 +620,19 @@ for (const [mesh, data] of [[yellow, yellowData], [blue, blueData], [green, gree
     if (seat.hidden) mesh.setMatrixAt(index, hiddenMatrix);
   });
 }
+// Небольшой разброс яркости кресел: выгоревшие и более тёмные места.
+{
+  let seed = 11;
+  const random = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  const shade = new THREE.Color();
+  for (const [mesh, total] of [[yellow, yellowCount], [blue, blueCount], [green, greenCount]]) {
+    for (let i = 0; i < total; i += 1) {
+      const value = 0.82 + random() * 0.18;
+      mesh.setColorAt(i, shade.setRGB(value, value, value));
+    }
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+  }
+}
 yellow.count = yellowCount;
 blue.count = blueCount;
 green.count = greenCount;
@@ -1066,7 +1079,7 @@ renderer.setAnimationLoop(() => {
   toggle.type = 'button';
   toggle.textContent = 'День';
   toggle.setAttribute('aria-label', 'Переключить время суток');
-  toggle.style.cssText = 'position:fixed;top:70px;right:4.5%;z-index:2;padding:8px 14px;border:1px solid rgba(244,241,226,.4);background:rgba(21,35,29,.82);color:#f4f1e2;font:600 12px system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;';
+  toggle.style.cssText = 'position:fixed;top:82px;right:4.5%;z-index:2;padding:8px 14px;border:1px solid rgba(244,241,226,.4);background:rgba(21,35,29,.82);color:#f4f1e2;font:600 12px system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;';
   let mode = 'day';
   toggle.addEventListener('click', () => {
     mode = mode === 'day' ? 'evening' : 'day';
