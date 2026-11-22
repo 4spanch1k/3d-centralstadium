@@ -1011,7 +1011,7 @@ renderer.setAnimationLoop(() => {
   toggle.type = 'button';
   toggle.textContent = 'День';
   toggle.setAttribute('aria-label', 'Переключить время суток');
-  toggle.style.cssText = 'position:fixed;top:24px;left:50%;transform:translateX(-50%);z-index:20;padding:9px 18px;border:1px solid rgba(244,241,226,.4);background:rgba(21,35,29,.82);color:#f4f1e2;font:600 12px system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;';
+  toggle.style.cssText = 'position:fixed;top:84px;right:24px;z-index:20;padding:8px 14px;border:1px solid rgba(244,241,226,.4);background:rgba(21,35,29,.82);color:#f4f1e2;font:600 12px system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;';
   let mode = 'day';
   toggle.addEventListener('click', () => {
     mode = mode === 'day' ? 'evening' : 'day';
