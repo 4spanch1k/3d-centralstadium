@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#21503c" />
-    <link rel="icon" href="data:," />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%2321503c'/%3E%3Ctext x='32' y='41' font-family='Arial,sans-serif' font-size='26' font-weight='700' text-anchor='middle' fill='%23e0a617'%3E%D0%A6%D0%A1%3C/text%3E%3C/svg%3E" />
     <meta name="description" content="Приблизительная 3D-модель Центрального стадиона Алматы: выбор трибуны, сектора, ряда и места и вид на поле с выбранной позиции." />
     <meta property="og:title" content="Центральный стадион — вид с трибун" />
     <meta property="og:description" content="Выберите место и посмотрите на поле с его позиции. Модель и нумерация приблизительные." />
@@ -35,7 +35,7 @@
         </section>
       </main>
       <aside class="booking-panel" id="booking-panel" aria-label="Выбор места" hidden>
-        <div class="panel-head"><h2 id="panel-title">Выбор места</h2><button type="button" id="close-booking" class="close-button" aria-label="Закрыть выбор места">×</button></div>
+        <div class="panel-head"><h2 id="panel-title" aria-live="polite">Выбор места</h2><button type="button" id="close-booking" class="close-button" aria-label="Закрыть выбор места">×</button></div>
         <ol class="steps" id="steps" aria-label="Шаги"><li data-step="stand">Трибуна</li><li data-step="sector">Сектор</li><li data-step="seat">Место</li><li data-step="view">Вид</li></ol>
         <div id="seat-form">
           <section id="stage-stand">
@@ -77,7 +77,7 @@
         </div>
       </aside>
       <p class="loading" id="loading">Загрузка модели…</p>
-      <p class="hint" id="hint">Выберите трибуну</p>
+      <p class="hint" id="hint" aria-live="polite">Выберите трибуну</p>
       <div id="error" role="alert" hidden>Не удалось открыть 3D-сцену. Попробуйте другой браузер или устройство.</div>
     </div>
     <script type="module" src="/src/main.js"></script>
