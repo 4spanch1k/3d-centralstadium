@@ -198,7 +198,9 @@ const greenGeometries = greenery.map((footprint) => {
   geometry.translate(0, -0.15, 0);
   return geometry;
 });
-scene.add(new THREE.Mesh(mergeGeometries(greenGeometries), material('#4d6a45')));
+const greenMaterial = material('#4d6a45');
+weather(greenMaterial);
+scene.add(new THREE.Mesh(mergeGeometries(greenGeometries), greenMaterial));
 greenGeometries.forEach((geometry) => geometry.dispose());
 // Деревья на зелёных участках: случайная, но воспроизводимая расстановка (породы и высоты условные).
 {
@@ -290,7 +292,9 @@ function ring(outerWidth, outerDepth, innerWidth, innerDepth, radius, height, su
 }
 
 // Геометрия чаши и места являются ориентировочными, а не измеренным планом.
-box(850, 0.5, 850, 0, -0.5, 0, material('#7d8873'));
+const groundMaterial = material('#7d8873');
+weather(groundMaterial);
+box(850, 0.5, 850, 0, -0.5, 0, groundMaterial);
 // Мягкая тень-«посадка» стадиона на землю: тёмный градиент вокруг чаши.
 {
   const contactCanvas = document.createElement('canvas');
