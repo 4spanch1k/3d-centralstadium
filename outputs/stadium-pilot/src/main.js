@@ -356,6 +356,7 @@ scene.add(centerSpot);
 
 
 const cornerFlags = [];
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 // Ворота, угловые флажки и рекламные борта (размеры стандартные, раскраска условная).
 for (const side of [-1, 1]) {
   const x = side * 52.5;
@@ -1130,7 +1131,7 @@ renderer.setAnimationLoop(() => {
     }
   }
   const clock = performance.now() / 1000;
-  for (const flag of cornerFlags) {
+  for (const flag of reducedMotion ? [] : cornerFlags) {
     flag.rotation.y = Math.sin(clock * 2.2 + flag.userData.phase) * 0.35;
     flag.rotation.z = Math.sin(clock * 3.1 + flag.userData.phase) * 0.06;
   }
@@ -1148,6 +1149,7 @@ renderer.setAnimationLoop(() => {
   toggle.type = 'button';
   toggle.textContent = 'День';
   toggle.setAttribute('aria-label', 'Переключить время суток');
+  toggle.setAttribute('aria-pressed', 'false');
   toggle.style.cssText = 'position:fixed;top:82px;right:4.5%;z-index:2;padding:8px 14px;border:1px solid rgba(244,241,226,.4);background:rgba(21,35,29,.82);color:#f4f1e2;font:600 12px system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;';
   // Ореолы вокруг прожекторов: видны только вечером.
   const glowCanvas = document.createElement('canvas');
@@ -1178,6 +1180,7 @@ renderer.setAnimationLoop(() => {
     mode = mode === 'day' ? 'evening' : 'day';
     const preset = presets[mode];
     toggle.textContent = mode === 'day' ? 'День' : 'Вечер';
+    toggle.setAttribute('aria-pressed', String(mode === 'evening'));
     sun.color.set(preset.sun);
     sun.intensity = preset.sunPower;
     sun.position.set(...preset.sunPosition);
