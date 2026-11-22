@@ -112,14 +112,21 @@ grassTexture.wrapT = THREE.RepeatWrapping;
 grassTexture.repeat.set(25, 16);
 grassTexture.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
 const grass = new THREE.MeshStandardMaterial({ map: grassTexture, roughness: 1 });
-const concreteTexture = new THREE.TextureLoader().load('/rough-concrete.webp', undefined, undefined, (error) => console.error('Не удалось загрузить текстуру', error));
-concreteTexture.colorSpace = THREE.SRGBColorSpace;
-concreteTexture.wrapS = THREE.RepeatWrapping;
-concreteTexture.wrapT = THREE.RepeatWrapping;
-concreteTexture.repeat.set(5, 2);
-concreteTexture.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
-const concrete = new THREE.MeshStandardMaterial({ color: '#b2b7b1', map: concreteTexture, roughness: 1 });
-const darkConcrete = new THREE.MeshStandardMaterial({ color: '#99a29c', map: concreteTexture, roughness: 1 });
+// Бетон: Poly Haven «Damaged Concrete Floor» (CC0) — цвет, нормали и шероховатость; на телефонах только цвет.
+const textureLoader = new THREE.TextureLoader();
+function concreteMap(file, color = false) {
+  const texture = textureLoader.load(file, undefined, undefined, (error) => console.error('Не удалось загрузить текстуру бетона', file, error));
+  if (color) texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(5, 2);
+  texture.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
+  return texture;
+}
+const concreteTexture = concreteMap('/concrete-diff.webp', true);
+const concreteExtras = lowPower ? {} : { normalMap: concreteMap('/concrete-normal.webp'), normalScale: new THREE.Vector2(0.7, 0.7), roughnessMap: concreteMap('/concrete-rough.webp') };
+const concrete = new THREE.MeshStandardMaterial({ color: '#d6d9d3', map: concreteTexture, roughness: 1, ...concreteExtras });
+const darkConcrete = new THREE.MeshStandardMaterial({ color: '#bcc2bc', map: concreteTexture, roughness: 1, ...concreteExtras });
 // Выцветание и разводы бетона: шум по мировым координатам, без отдельных текстур.
 function weather(surface) {
   surface.onBeforeCompile = (shader) => {
