@@ -26,6 +26,7 @@ let pixelRatio = Math.min(window.devicePixelRatio, lowPower ? 1.25 : 1.5);
 renderer.setPixelRatio(pixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.setClearColor('#a7c0c3', 1);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.shadowMap.autoUpdate = false;
@@ -1427,6 +1428,7 @@ let lastRender = 0;
 let frameTotal = 0;
 let frameCount = 0;
 let lastResolutionChange = 0;
+let pendingPixelRatio = null;
 let lastRaise = 0;
 let noRaiseUntil = 0;
 const markDirty = () => { lastActivity = performance.now(); };
@@ -1451,6 +1453,11 @@ renderer.setAnimationLoop(() => {
   const gap = now - lastRender;
   if (gap < (active ? 15 : 50)) return;
   lastRender = now;
+  // Смена разрешения очищает холст, поэтому применяется в начале кадра, прямо перед отрисовкой: иначе мелькает пустой кадр.
+  if (pendingPixelRatio !== null) {
+    applyPixelRatio(pendingPixelRatio);
+    pendingPixelRatio = null;
+  }
   if (cameraTransition) {
     const transition = cameraTransition;
     const progress = transition.duration ? Math.min((now - transition.start) / transition.duration, 1) : 1;
@@ -1499,12 +1506,16 @@ renderer.setAnimationLoop(() => {
       else if (average > 19 && pixelRatio > 0.65 && now - lastResolutionChange > 1200) {
         const justRaised = now - lastRaise < 4000;
         pixelCeiling = Math.max(0.65, pixelRatio * 0.88);
-        applyPixelRatio(pixelCeiling);
+        pendingPixelRatio = pixelCeiling;
+        pixelRatio = pixelCeiling;
         lastResolutionChange = now;
+        markDirty();
         if (justRaised) noRaiseUntil = now + 30000;
       } else if (average < 17.6 && pixelRatio < maxPixelRatio && now > noRaiseUntil && now - lastRaise > 8000) {
-        applyPixelRatio(Math.min(maxPixelRatio, pixelRatio + 0.1));
+        pendingPixelRatio = Math.min(maxPixelRatio, pixelRatio + 0.1);
+        pixelRatio = pendingPixelRatio;
         lastRaise = now;
+        markDirty();
         lastResolutionChange = now;
       }
     }
