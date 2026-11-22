@@ -291,6 +291,25 @@ function ring(outerWidth, outerDepth, innerWidth, innerDepth, radius, height, su
 
 // Геометрия чаши и места являются ориентировочными, а не измеренным планом.
 box(850, 0.5, 850, 0, -0.5, 0, material('#7d8873'));
+// Мягкая тень-«посадка» стадиона на землю: тёмный градиент вокруг чаши.
+{
+  const contactCanvas = document.createElement('canvas');
+  contactCanvas.width = 256;
+  contactCanvas.height = 256;
+  const contactContext = contactCanvas.getContext('2d');
+  contactContext.translate(128, 128);
+  contactContext.scale(1, 0.82);
+  const contactGradient = contactContext.createRadialGradient(0, 0, 70, 0, 0, 128);
+  contactGradient.addColorStop(0, 'rgba(20,28,22,0.55)');
+  contactGradient.addColorStop(0.55, 'rgba(20,28,22,0.3)');
+  contactGradient.addColorStop(1, 'rgba(20,28,22,0)');
+  contactContext.fillStyle = contactGradient;
+  contactContext.fillRect(-128, -156, 256, 312);
+  const contact = new THREE.Mesh(new THREE.PlaneGeometry(330, 270), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(contactCanvas), transparent: true, depthWrite: false }));
+  contact.rotation.x = -Math.PI / 2;
+  contact.position.y = -0.2;
+  scene.add(contact);
+}
 const farGround = new THREE.Mesh(new THREE.CircleGeometry(6500, 48), material('#6e7a66', 1));
 farGround.rotation.x = -Math.PI / 2;
 farGround.position.y = -0.8;
