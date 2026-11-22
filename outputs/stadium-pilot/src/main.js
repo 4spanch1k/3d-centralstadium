@@ -290,6 +290,32 @@ for (const [length, x, z, turn] of [[105, 0, -35.6, 0], [105, 0, 35.6, 0], [71, 
   scene.add(board);
 }
 
+// Скамейки запасных на западной стороне поля (ориентировочно).
+const dugoutGlass = new THREE.MeshStandardMaterial({ color: '#9fc4cf', transparent: true, opacity: 0.28, roughness: 0.1, depthWrite: false });
+const dugoutFrame = material('#2a3236', 0.5);
+const dugoutSeat = material('#c9362f', 0.6);
+for (const x of [-10, 10]) {
+  const z = -38.4;
+  const roofPanel = new THREE.Mesh(new THREE.BoxGeometry(7, 0.08, 1.6), dugoutGlass);
+  roofPanel.position.set(x, 2.1, z);
+  const back = new THREE.Mesh(new THREE.BoxGeometry(7, 1.9, 0.05), dugoutGlass);
+  back.position.set(x, 1.1, z - 0.8);
+  const bench = new THREE.Mesh(new THREE.BoxGeometry(6.4, 0.08, 0.4), dugoutSeat);
+  bench.position.set(x, 0.42, z - 0.4);
+  const backrest = new THREE.Mesh(new THREE.BoxGeometry(6.4, 0.4, 0.06), dugoutSeat);
+  backrest.position.set(x, 0.72, z - 0.62);
+  scene.add(roofPanel, back, bench, backrest);
+  for (const dx of [-3.5, 3.5]) {
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.08, 2.1, 0.08), dugoutFrame);
+    post.position.set(x + dx, 1.05, z + 0.75);
+    post.castShadow = true;
+    scene.add(post);
+    const postBack = post.clone();
+    postBack.position.z = z - 0.78;
+    scene.add(postBack);
+  }
+  roofPanel.castShadow = true;
+}
 ring(70, 52, 54, 35, 29, 0.02, darkConcrete);
 ring(65, 46, 54, 35, 26, 0.04, track);
 for (let i = 0; i <= 8; i += 1) {
