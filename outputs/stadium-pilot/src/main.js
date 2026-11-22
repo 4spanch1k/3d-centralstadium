@@ -81,7 +81,8 @@ controls.minDistance = 90;
 controls.maxDistance = 390;
 controls.maxPolarAngle = Math.PI / 2.2;
 controls.target.set(0, 4, 0);
-scene.add(new THREE.HemisphereLight('#f4f1e2', '#4a5c5a', 0.75));
+const hemisphere = new THREE.HemisphereLight('#f4f1e2', '#4a5c5a', 0.75);
+scene.add(hemisphere);
 const sun = new THREE.DirectionalLight('#fff0d0', 2.6);
 sun.position.set(-85, 140, -70);
 sun.castShadow = true;
@@ -649,9 +650,31 @@ const scoreboardFrame = material('#b7bcb7');
 const scoreboardScreen = material('#151d1d');
 for (const z of [-4.5, 4.5]) box(1, 10, 1, -99, 5, z, scoreboardFrame);
 box(1.2, 7.6, 15, -99, 13.8, 0, scoreboardFrame);
-box(0.08, 6.4, 13.7, -98.36, 13.8, 0, scoreboardScreen);
+const scoreCanvas = document.createElement('canvas');
+scoreCanvas.width = 1024;
+scoreCanvas.height = 480;
+const scoreContext = scoreCanvas.getContext('2d');
+scoreContext.fillStyle = '#071014';
+scoreContext.fillRect(0, 0, 1024, 480);
+scoreContext.textAlign = 'center';
+scoreContext.fillStyle = '#e0a617';
+scoreContext.font = '700 64px system-ui, sans-serif';
+scoreContext.fillText('ЦЕНТРАЛЬНЫЙ СТАДИОН', 512, 100);
+scoreContext.fillStyle = '#f4f1e2';
+scoreContext.font = '700 190px system-ui, sans-serif';
+scoreContext.fillText('0 : 0', 512, 300);
+scoreContext.fillStyle = '#4c9bff';
+scoreContext.font = '600 56px system-ui, sans-serif';
+scoreContext.fillText('АЛМАТЫ  ·  00:00', 512, 410);
+const scoreTexture = new THREE.CanvasTexture(scoreCanvas);
+scoreTexture.colorSpace = THREE.SRGBColorSpace;
+scoreTexture.anisotropy = 4;
+const scoreLit = new THREE.MeshStandardMaterial({ map: scoreTexture, emissive: '#ffffff', emissiveMap: scoreTexture, emissiveIntensity: 0.9, roughness: 0.4 });
+const scoreScreen = new THREE.Mesh(new THREE.BoxGeometry(0.08, 6.4, 13.7), [scoreLit, scoreboardScreen, scoreboardScreen, scoreboardScreen, scoreboardScreen, scoreboardScreen]);
+scoreScreen.position.set(-98.36, 13.8, 0);
+scene.add(scoreScreen);
 const towerLines = [];
-const floodlights = new THREE.InstancedMesh(new THREE.BoxGeometry(0.65, 0.5, 0.22), new THREE.MeshStandardMaterial({ color: '#ecede4', emissive: '#d5d6c9', emissiveIntensity: 0.25 }), 84);
+const floodlights = new THREE.InstancedMesh(new THREE.BoxGeometry(0.65, 0.5, 0.22), new THREE.MeshStandardMaterial({ color: '#ecede4', emissive: '#fff3d0', emissiveIntensity: 0.6 }), 84);
 let lightIndex = 0;
 for (const x of [-102, 102]) {
   for (const z of [-90, 90]) {
@@ -977,3 +1000,34 @@ renderer.setAnimationLoop(() => {
   if (controls.enabled) controls.update();
   renderer.render(scene, camera);
 });
+
+// Переключатель времени суток: день и вечер (вечерний свет приблизительный).
+{
+  const presets = {
+    day: { sun: '#fff0d0', sunPower: 2.6, sunPosition: [-85, 140, -70], sky: '#f4f1e2', ground: '#4a5c5a', fill: 0.75, exposure: 1.05, env: 0.45, backdrop: 1, lamps: 0.6 },
+    evening: { sun: '#ff9f55', sunPower: 1.5, sunPosition: [-150, 38, -40], sky: '#8f9cc4', ground: '#3b3a4a', fill: 0.5, exposure: 0.95, env: 0.22, backdrop: 0.38, lamps: 2.4 },
+  };
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.textContent = 'День';
+  toggle.setAttribute('aria-label', 'Переключить время суток');
+  toggle.style.cssText = 'position:fixed;top:24px;left:50%;transform:translateX(-50%);z-index:20;padding:9px 18px;border:1px solid rgba(244,241,226,.4);background:rgba(21,35,29,.82);color:#f4f1e2;font:600 12px system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;';
+  let mode = 'day';
+  toggle.addEventListener('click', () => {
+    mode = mode === 'day' ? 'evening' : 'day';
+    const preset = presets[mode];
+    toggle.textContent = mode === 'day' ? 'День' : 'Вечер';
+    sun.color.set(preset.sun);
+    sun.intensity = preset.sunPower;
+    sun.position.set(...preset.sunPosition);
+    hemisphere.color.set(preset.sky);
+    hemisphere.groundColor.set(preset.ground);
+    hemisphere.intensity = preset.fill;
+    renderer.toneMappingExposure = preset.exposure;
+    scene.environmentIntensity = preset.env;
+    scene.backgroundIntensity = preset.backdrop;
+    floodlights.material.emissiveIntensity = preset.lamps;
+    renderer.shadowMap.needsUpdate = true;
+  });
+  document.body.appendChild(toggle);
+}
