@@ -544,9 +544,19 @@ seatBack.translate(0, 0.04, 0.18);
 const seatGeometry = mergeGeometries([seatBase, seatBack]);
 seatBase.dispose();
 seatBack.dispose();
-const yellow = new THREE.InstancedMesh(seatGeometry, yellowSeats, rows * seatsPerRow);
-const blue = new THREE.InstancedMesh(seatGeometry, blueSeats, rows * seatsPerRow);
-const green = new THREE.InstancedMesh(seatGeometry, greenSeats, rows * seatsPerRow);
+// Упрощённое кресло (36 треугольников) для общего вида; детальное (около 200) показывается только вблизи.
+const lowBase = new THREE.BoxGeometry(0.5, 0.07, 0.42);
+lowBase.translate(0, 0.035, 0);
+const lowBack = new THREE.BoxGeometry(0.47, 0.5, 0.07);
+lowBack.rotateX(-0.12);
+lowBack.translate(0, 0.3, 0.2);
+const lowLeg = new THREE.BoxGeometry(0.09, 0.25, 0.12);
+lowLeg.translate(0, -0.15, 0.08);
+const lowSeatGeometry = mergeGeometries([lowBase, lowBack, lowLeg]);
+[lowBase, lowBack, lowLeg].forEach((part) => part.dispose());
+const yellow = new THREE.InstancedMesh(lowSeatGeometry, yellowSeats, rows * seatsPerRow);
+const blue = new THREE.InstancedMesh(lowSeatGeometry, blueSeats, rows * seatsPerRow);
+const green = new THREE.InstancedMesh(lowSeatGeometry, greenSeats, rows * seatsPerRow);
 const modelLoader = new GLTFLoader();
 modelLoader.load('/alatau-terrain.glb', (model) => {
   model.scene.traverse((object) => {
@@ -560,11 +570,10 @@ modelLoader.load('/stadium-seat.glb', (model) => {
     console.error('The stadium seat model does not contain a seat mesh.');
     return;
   }
-  yellow.geometry = seat.geometry;
-  blue.geometry = seat.geometry;
-  green.geometry = seat.geometry;
-  seatGeometry.dispose();
-  renderer.shadowMap.needsUpdate = true;
+  const previous = detailSeatGeometry;
+  detailSeatGeometry = seat.geometry;
+  for (const mesh of Object.values(detailMeshes)) mesh.geometry = detailSeatGeometry;
+  previous.dispose();
 }, undefined, (error) => console.error('Could not load the stadium seat model:', error));
 yellow.castShadow = true;
 blue.castShadow = true;
@@ -575,7 +584,23 @@ const seatHits = new THREE.InstancedMesh(hitGeometry, new THREE.MeshBasicMateria
 seatHits.visible = false;
 const supportGeometry = new THREE.BoxGeometry(0.09, 0.25, 0.12);
 supportGeometry.translate(0, -0.15, 0.08);
-const seatSupports = new THREE.InstancedMesh(supportGeometry, material('#59645e', 0.75), rows * seatsPerRow);
+// Детальные кресла вблизи: отдельные небольшие меши только для нужных мест (сектор или окрестность кресла).
+const detailCapacity = 2400;
+let detailSeatGeometry = seatGeometry;
+const detailMeshes = {
+  yellow: new THREE.InstancedMesh(seatGeometry, yellowSeats, detailCapacity),
+  blue: new THREE.InstancedMesh(seatGeometry, blueSeats, detailCapacity),
+  green: new THREE.InstancedMesh(seatGeometry, greenSeats, detailCapacity),
+};
+const detailLegs = new THREE.InstancedMesh(supportGeometry, material('#59645e', 0.75), detailCapacity * 3);
+const sectorHits = new THREE.InstancedMesh(hitGeometry, new THREE.MeshBasicMaterial(), detailCapacity * 3);
+sectorHits.visible = false;
+const sectorRefs = [];
+for (const mesh of [...Object.values(detailMeshes), detailLegs, sectorHits]) {
+  mesh.count = 0;
+  mesh.frustumCulled = false;
+}
+scene.add(...Object.values(detailMeshes), detailLegs, sectorHits);
 const helper = new THREE.Object3D();
 const yellowData = [];
 const blueData = [];
@@ -618,16 +643,18 @@ for (let row = 0; row < rows; row += 1) {
     if (stand === 'west' && Math.abs(point.x) < 12.5 && point.y > 72.5) continue;
     const seat = { stand, row: row + 1, position: helper.position.clone(), matrix: helper.matrix.clone() };
     seatHits.setMatrixAt(seats.length, helper.matrix);
-    seatSupports.setMatrixAt(seats.length, helper.matrix);
     seats.push(seat);
     if ((stand === 'east' && row < 13) || (stand === 'south' && Math.floor(i / 16) % 2 === 0)) {
       green.setMatrixAt(greenCount++, helper.matrix);
+      seat.group = 'green';
       greenData.push(seat);
     } else if (((stand === 'east' || stand === 'west') && row >= 15) || (stand === 'north' && Math.floor(i / 16) % 3 === 0)) {
       blue.setMatrixAt(blueCount++, helper.matrix);
+      seat.group = 'blue';
       blueData.push(seat);
     } else {
       yellow.setMatrixAt(yellowCount++, helper.matrix);
+      seat.group = 'yellow';
       yellowData.push(seat);
     }
   }
@@ -665,7 +692,7 @@ for (const seat of seats) {
     else seat.row = row + 1;
   }
 }
-for (const [mesh, data] of [[yellow, yellowData], [blue, blueData], [green, greenData], [seatHits, seats], [seatSupports, seats]]) {
+for (const [mesh, data] of [[yellow, yellowData], [blue, blueData], [green, greenData], [seatHits, seats]]) {
   data.forEach((seat, index) => {
     if (seat.hidden) mesh.setMatrixAt(index, hiddenMatrix);
   });
@@ -733,13 +760,11 @@ blue.instanceMatrix.needsUpdate = true;
 green.instanceMatrix.needsUpdate = true;
 seatHits.count = seats.length;
 seatHits.instanceMatrix.needsUpdate = true;
-seatSupports.count = seats.length;
-seatSupports.instanceMatrix.needsUpdate = true;
 aisleSteps.instanceMatrix.needsUpdate = true;
 aisleSteps.receiveShadow = true;
 // Меши из тысяч копий всегда видны целиком: отключаем отсечение по границам, чтобы кресла не исчезали при повороте.
-for (const instanced of [yellow, blue, green, seatHits, seatSupports, aisleSteps]) instanced.frustumCulled = false;
-scene.add(yellow, blue, green, seatHits, seatSupports, aisleSteps);
+for (const instanced of [yellow, blue, green, seatHits, aisleSteps]) instanced.frustumCulled = false;
+scene.add(yellow, blue, green, seatHits, aisleSteps);
 // Выходы на верхней кромке чаши в конце каждого прохода (положение и размеры ориентировочные).
 {
   const darkOpening = new THREE.MeshStandardMaterial({ color: '#0d1112', roughness: 1 });
@@ -948,7 +973,7 @@ function lookFromSeat() {
 function setView(name) {
   view = name;
   stage = 'stand';
-  applySectorFilter(null);
+  applyDetail('none');
   clearMarker();
   const selected = views[name];
   const target = name === 'overview' ? new THREE.Vector3(0, 4, 0) : new THREE.Vector3(...selected.target);
@@ -1028,16 +1053,42 @@ function showMarker(seat) {
 function clearMarker() {
   seatMarker.visible = false;
 }
-// В режиме сектора остальные места скрыты: остаются только места выбранного сектора.
-function applySectorFilter(sector) {
-  for (const [mesh, data] of [[yellow, yellowData], [blue, blueData], [green, greenData], [seatHits, seats], [seatSupports, seats]]) {
-    data.forEach((seat, index) => {
-      const visible = !seat.hidden && (sector == null || (seat.stand === standSelect.value && seat.sector === sector));
-      mesh.setMatrixAt(index, visible ? seat.matrix : hiddenMatrix);
-    });
+// Режимы показа мест: none (общий вид, простые кресла), sector (только места сектора, детально), near (вид с места: рядом детально).
+function applyDetail(mode, origin) {
+  const picked = [];
+  if (mode === 'sector') {
+    const sector = Number(sectorSelect.value);
+    for (const seat of seats) if (!seat.hidden && seat.stand === standSelect.value && seat.sector === sector) picked.push(seat);
+  } else if (mode === 'near') {
+    for (const seat of seats) if (!seat.hidden && seat.position.distanceToSquared(origin) < 24 * 24) picked.push(seat);
+  }
+  const chosen = new Set(picked);
+  const mainVisible = mode !== 'sector';
+  for (const [mesh, data] of [[yellow, yellowData], [blue, blueData], [green, greenData]]) {
+    mesh.visible = mainVisible;
+    if (!mainVisible) continue;
+    data.forEach((seat, index) => mesh.setMatrixAt(index, !seat.hidden && !chosen.has(seat) ? seat.matrix : hiddenMatrix));
     mesh.instanceMatrix.needsUpdate = true;
   }
-  seatHits.computeBoundingSphere();
+  const counts = { yellow: 0, blue: 0, green: 0 };
+  let legs = 0;
+  sectorRefs.length = 0;
+  for (const seat of picked) {
+    if (counts[seat.group] >= detailCapacity) continue;
+    detailMeshes[seat.group].setMatrixAt(counts[seat.group]++, seat.matrix);
+    detailLegs.setMatrixAt(legs++, seat.matrix);
+    sectorHits.setMatrixAt(sectorRefs.length, seat.matrix);
+    sectorRefs.push(seat);
+  }
+  for (const [group, mesh] of Object.entries(detailMeshes)) {
+    mesh.count = counts[group];
+    mesh.instanceMatrix.needsUpdate = true;
+  }
+  detailLegs.count = legs;
+  detailLegs.instanceMatrix.needsUpdate = true;
+  sectorHits.count = sectorRefs.length;
+  sectorHits.instanceMatrix.needsUpdate = true;
+  if (sectorRefs.length) sectorHits.computeBoundingSphere();
 }
 function currentPlace() {
   return `${standNames[selectedSeat.stand]} · сектор ${selectedSeat.sector} · ряд ${selectedSeat.row} · место ${selectedSeat.number}`;
@@ -1074,7 +1125,7 @@ function selectSector(sector) {
   updateSectorOptions(sector);
   stage = 'sector';
   clearMarker();
-  applySectorFilter(Number(sectorSelect.value));
+  applyDetail('sector');
   showSector();
   renderStage();
 }
@@ -1097,10 +1148,10 @@ function showSeat() {
   if (!selectedSeat) return;
   view = 'seat';
   stage = 'seat';
-  applySectorFilter(null);
   clearMarker();
   updateSeatHighlights();
   const position = selectedSeat.position.clone().add(new THREE.Vector3(0, 1, 0));
+  applyDetail('near', position);
   yaw = Math.atan2(-position.z, -position.x);
   initialYaw = yaw;
   pitch = -0.12;
@@ -1229,9 +1280,11 @@ canvas.addEventListener('pointerup', (event) => {
     return;
   }
   if (!bookingOpen) return;
-  const hit = raycaster.intersectObject(seatHits)[0];
+  const standStage = stage === 'stand';
+  const hit = raycaster.intersectObject(standStage ? seatHits : sectorHits)[0];
   if (!hit) return;
-  const seat = seats[hit.instanceId];
+  const seat = standStage ? seats[hit.instanceId] : sectorRefs[hit.instanceId];
+  if (!seat) return;
   if (seat.hidden || seat.stand !== standSelect.value) return;
   if (stage === 'stand') {
     selectSector(seat.sector);
@@ -1262,8 +1315,8 @@ canvas.addEventListener('pointermove', (event) => {
   const bounds = canvas.getBoundingClientRect();
   hoverPointer.set((event.clientX - bounds.left) / bounds.width * 2 - 1, -(event.clientY - bounds.top) / bounds.height * 2 + 1);
   hoverRaycaster.setFromCamera(hoverPointer, camera);
-  const hit = hoverRaycaster.intersectObject(seatHits)[0];
-  const seat = hit && seats[hit.instanceId];
+  const hit = hoverRaycaster.intersectObject(sectorHits)[0];
+  const seat = hit && sectorRefs[hit.instanceId];
   if (!seat || seat.hidden) {
     seatTip.hidden = true;
     canvas.style.cursor = '';
@@ -1286,6 +1339,7 @@ window.addEventListener('resize', () => {
 setView('overview');
 // Затенение в контактах (ambient occlusion): тёмные стыки между рядами, креслами и ступенями.
 // Включается только на десктопе; ?fx=0 в адресе отключает эффект.
+if (location.search.includes('debug')) window.__debug = { renderer, scene, camera };
 const fpsWindow = { start: performance.now(), last: performance.now(), frames: 0, checks: 0 };
 let composer;
 if (!window.matchMedia('(pointer: coarse)').matches && new URLSearchParams(location.search).get('fx') !== '0') {
