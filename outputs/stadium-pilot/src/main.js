@@ -314,7 +314,7 @@ wearGradient.addColorStop(0.6, 'rgba(92,78,48,0.25)');
 wearGradient.addColorStop(1, 'rgba(92,78,48,0)');
 wearContext.fillStyle = wearGradient;
 wearContext.fillRect(0, 0, 128, 128);
-const wearMaterial = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(wearCanvas), transparent: true, depthWrite: false });
+const wearMaterial = new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(wearCanvas), transparent: true, depthWrite: false, roughness: 1 });
 for (const [x, z, width, depth] of [[-49, 0, 12, 20], [49, 0, 12, 20], [0, 0, 14, 14], [-30, 18, 10, 8], [28, -16, 10, 8]]) {
   const patch = new THREE.Mesh(new THREE.PlaneGeometry(width, depth), wearMaterial);
   patch.rotation.x = -Math.PI / 2;
@@ -1107,6 +1107,30 @@ renderer.setAnimationLoop(() => {
   toggle.textContent = 'День';
   toggle.setAttribute('aria-label', 'Переключить время суток');
   toggle.style.cssText = 'position:fixed;top:82px;right:4.5%;z-index:2;padding:8px 14px;border:1px solid rgba(244,241,226,.4);background:rgba(21,35,29,.82);color:#f4f1e2;font:600 12px system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;';
+  // Ореолы вокруг прожекторов: видны только вечером.
+  const glowCanvas = document.createElement('canvas');
+  glowCanvas.width = 64;
+  glowCanvas.height = 64;
+  const glowContext = glowCanvas.getContext('2d');
+  const glowGradient = glowContext.createRadialGradient(32, 32, 0, 32, 32, 32);
+  glowGradient.addColorStop(0, 'rgba(255,244,208,1)');
+  glowGradient.addColorStop(0.3, 'rgba(255,230,170,0.45)');
+  glowGradient.addColorStop(1, 'rgba(255,220,150,0)');
+  glowContext.fillStyle = glowGradient;
+  glowContext.fillRect(0, 0, 64, 64);
+  const glowPositions = [];
+  const lampMatrix = new THREE.Matrix4();
+  const lampPosition = new THREE.Vector3();
+  for (let i = 0; i < floodlights.count; i += 1) {
+    floodlights.getMatrixAt(i, lampMatrix);
+    lampPosition.setFromMatrixPosition(lampMatrix);
+    glowPositions.push(lampPosition.x, lampPosition.y, lampPosition.z);
+  }
+  const glowGeometry = new THREE.BufferGeometry();
+  glowGeometry.setAttribute('position', new THREE.Float32BufferAttribute(glowPositions, 3));
+  const glow = new THREE.Points(glowGeometry, new THREE.PointsMaterial({ map: new THREE.CanvasTexture(glowCanvas), size: 7, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+  glow.visible = false;
+  scene.add(glow);
   let mode = 'day';
   toggle.addEventListener('click', () => {
     mode = mode === 'day' ? 'evening' : 'day';
@@ -1122,6 +1146,8 @@ renderer.setAnimationLoop(() => {
     scene.environmentIntensity = preset.env;
     scene.backgroundIntensity = preset.backdrop;
     floodlights.material.emissiveIntensity = preset.lamps;
+    glow.visible = mode === 'evening';
+    glow.material.opacity = mode === 'evening' ? 0.85 : 0;
     renderer.shadowMap.needsUpdate = true;
   });
   document.body.appendChild(toggle);
