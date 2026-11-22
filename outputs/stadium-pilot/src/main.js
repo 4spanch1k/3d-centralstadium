@@ -1481,6 +1481,12 @@ if (location.search.includes('debug')) {
   };
   window.__debug.exportScene = async (name = 'stadium-scene.glb') => {
     const { GLTFExporter } = await import('three/addons/exporters/GLTFExporter.js');
+    // Для рендера все кресла берутся детальными (с опорами), а не упрощёнными.
+    const lowGeometry = yellow.geometry;
+    for (const mesh of [yellow, blue, green]) mesh.geometry = detailSeatGeometry;
+    const exportLegs = new THREE.InstancedMesh(supportGeometry, detailLegs.material, seats.length);
+    seats.forEach((seat, index) => exportLegs.setMatrixAt(index, seat.hidden ? hiddenMatrix : seat.matrix));
+    scene.add(exportLegs);
     const hidden = [];
     scene.traverse((object) => {
       if (object.isPoints || object === seatMarker || object.parent === null) return;
@@ -1488,6 +1494,8 @@ if (location.search.includes('debug')) {
     });
     const result = await new GLTFExporter().parseAsync(scene, { binary: true, onlyVisible: true, maxTextureSize: 1024 });
     hidden.forEach(([object, visible]) => { object.visible = visible; });
+    for (const mesh of [yellow, blue, green]) mesh.geometry = lowGeometry;
+    scene.remove(exportLegs);
     const response = await fetch(`/__save?name=${name}`, { method: 'POST', body: result });
     return Number(await response.text());
   };

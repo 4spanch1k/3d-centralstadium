@@ -44,7 +44,12 @@ try:
     scene.cycles.device = 'GPU'
 except Exception as e:
     print('GPU недоступен:', e)
-scene.view_settings.view_transform = 'AgX'
+for transform in ('Khronos PBR Neutral', 'AgX'):
+    try:
+        scene.view_settings.view_transform = transform
+        break
+    except Exception:
+        continue
 scene.render.image_settings.file_format = 'JPEG'; scene.render.image_settings.quality = 90
 
 done = json.load(open(index_path)) if os.path.exists(index_path) else []
