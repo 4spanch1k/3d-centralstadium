@@ -1255,6 +1255,7 @@ async function tryPanorama(position, token) {
   if (!texture || token !== panoToken || view !== 'seat') return;
   withVeil(() => {
     if (token !== panoToken || view !== 'seat') return;
+    renderer.initTexture(texture);
     applyPanorama(node, texture, position);
   });
 }
@@ -1272,7 +1273,6 @@ async function getPanoTexture(file) {
   if (!texture) return null;
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
-  renderer.initTexture(texture);
   panoTextures.set(file, texture);
   while (panoTextures.size > panoCacheLimit) {
     const [oldest, oldTexture] = panoTextures.entries().next().value;
@@ -1293,7 +1293,6 @@ function showSeat() {
   clearMarker();
   updateSeatHighlights();
   const position = selectedSeat.position.clone().add(new THREE.Vector3(0, 1, 0));
-  applyDetail('near', position);
   panoMode = false;
   panoToken += 1;
   yaw = Math.atan2(-position.z, -position.x);
@@ -1302,10 +1301,13 @@ function showSeat() {
   // Если панорама уже в кэше, переходим сразу (без пролёта по живой сцене), под коротким затемнением.
   const cachedNode = panoNodeList ? chooseNode(panoNodeList, position) : null;
   const cachedTexture = cachedNode && panoTextures.get(cachedNode.file);
+  // Живая сцена в виде с панорамой не рисуется, поэтому детальные кресла вокруг места собираем только когда панорамы нет.
+  if (!cachedTexture) applyDetail('near', position);
   if (cachedNode && cachedTexture) {
     const token = panoToken;
     withVeil(() => {
       if (token !== panoToken || view !== 'seat') return;
+      renderer.initTexture(cachedTexture);
       applyPanorama(cachedNode, cachedTexture, position);
       const look = new THREE.Vector3(Math.cos(pitch) * Math.cos(yaw), Math.sin(pitch), Math.cos(pitch) * Math.sin(yaw));
       moveCamera(position, position.clone().add(look), seatFov(), false, true);
