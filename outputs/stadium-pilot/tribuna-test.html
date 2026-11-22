@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Пробная трибуна — вид с места</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, sans-serif; background: #a7c0c3; }
+    .panel { position: absolute; top: 18px; left: 18px; max-width: 310px; padding: 18px; background: #f7f7ef; color: #21392d; border-radius: 8px; }
+    h1 { font-size: 18px; margin: 0 0 8px; }
+    p { font-size: 13px; line-height: 1.5; margin: 0 0 12px; }
+    button { border: 0; background: #203e31; color: white; padding: 10px 14px; border-radius: 4px; cursor: pointer; }
+    canvas { display: block; touch-action: none; }
+    @media (max-width: 600px) { .panel { top: auto; bottom: 12px; left: 12px; right: 12px; max-width: none; } }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <h1>Пробная трибуна</h1>
+    <p id="status">Нажмите на кресло, чтобы увидеть поле с его позиции. Геометрия и нумерация условные.</p>
+    <button id="back" hidden>← К выбору места</button>
+  </div>
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+    import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#a8c6dc');
+    const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 500);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
+    document.body.appendChild(renderer.domElement);
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x536765, 2.2));
+    const light = new THREE.DirectionalLight(0xfff2d6, 2);
+    light.position.set(-20, 40, 20);
+    scene.add(light);
+
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(150, 120), new THREE.MeshStandardMaterial({ color: '#3a7ca2', roughness: 0.9 }));
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -0.35;
+    scene.add(ground);
+    const grassCanvas = document.createElement('canvas');
+    grassCanvas.width = 512;
+    grassCanvas.height = 512;
+    const grassContext = grassCanvas.getContext('2d');
+    for (let strip = 0; strip < 10; strip += 1) {
+      grassContext.fillStyle = strip % 2 ? '#477e4a' : '#3c7140';
+      grassContext.fillRect(strip * 51.2, 0, 52, 512);
+    }
+    for (let y = 0; y < 512; y += 3) {
+      for (let x = 0; x < 512; x += 3) {
+        const shade = (x * 17 + y * 31) % 37;
+        grassContext.fillStyle = `rgba(220, 236, 175, ${shade / 650})`;
+        grassContext.fillRect(x, y, 1, 2);
+      }
+    }
+    const grassTexture = new THREE.CanvasTexture(grassCanvas);
+    grassTexture.colorSpace = THREE.SRGBColorSpace;
+    const grass = new THREE.Mesh(new THREE.PlaneGeometry(105, 68), new THREE.MeshStandardMaterial({ map: grassTexture, roughness: 1 }));
+    grass.rotation.x = -Math.PI / 2;
+    grass.position.y = -0.3;
+    scene.add(grass);
+    const lines = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(105, 68)), new THREE.LineBasicMaterial({ color: '#e8ead9' }));
+    lines.rotation.x = -Math.PI / 2;
+    lines.position.y = -0.27;
+    scene.add(lines);
+    const middle = new THREE.Mesh(new THREE.PlaneGeometry(0.18, 68), new THREE.MeshBasicMaterial({ color: '#e8ead9' }));
+    middle.rotation.x = -Math.PI / 2;
+    middle.position.y = -0.26;
+    scene.add(middle);
+    const white = new THREE.MeshBasicMaterial({ color: '#e8ead9' });
+    const markings = [
+      [-44.25, -20, 16.5, 0.18], [-44.25, 20, 16.5, 0.18], [-36, 0, 0.18, 40],
+      [44.25, -20, 16.5, 0.18], [44.25, 20, 16.5, 0.18], [36, 0, 0.18, 40],
+      [-49.75, -9, 5.5, 0.18], [-49.75, 9, 5.5, 0.18], [-47, 0, 0.18, 18],
+      [49.75, -9, 5.5, 0.18], [49.75, 9, 5.5, 0.18], [47, 0, 0.18, 18],
+    ];
+    for (const [x, z, width, depth] of markings) {
+      const line = new THREE.Mesh(new THREE.PlaneGeometry(width, depth), white);
+      line.rotation.x = -Math.PI / 2;
+      line.position.set(x, -0.26, z);
+      scene.add(line);
+    }
+    const centerCircle = new THREE.Mesh(new THREE.RingGeometry(9, 9.16, 64), white);
+    centerCircle.rotation.x = -Math.PI / 2;
+    centerCircle.position.y = -0.26;
+    scene.add(centerCircle);
+    for (let lane = 0; lane < 5; lane += 1) {
+      for (const side of [-1, 1]) {
+        const line = new THREE.Mesh(new THREE.PlaneGeometry(135, 0.08), white);
+        line.rotation.x = -Math.PI / 2;
+        line.position.set(0, -0.32, side * (38 + lane * 1.4));
+        scene.add(line);
+      }
+    }
+
+    const concreteTexture = new THREE.TextureLoader().load('/rough-concrete.jpg', undefined, undefined, (error) => {
+      console.error('Не удалось загрузить текстуру бетона', error);
+    });
+    concreteTexture.colorSpace = THREE.SRGBColorSpace;
+    concreteTexture.wrapS = THREE.RepeatWrapping;
+    concreteTexture.wrapT = THREE.RepeatWrapping;
+    concreteTexture.repeat.set(4, 1);
+    concreteTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    const concrete = new THREE.MeshStandardMaterial({ color: '#c1c6bf', map: concreteTexture, roughness: 1 });
+    const seatBase = new THREE.BoxGeometry(0.5, 0.1, 0.46);
+    const seatBack = new THREE.BoxGeometry(0.5, 0.48, 0.09);
+    seatBack.translate(0, 0.22, 0.18);
+    const seatGeometry = mergeGeometries([seatBase, seatBack]);
+    seatBase.dispose();
+    seatBack.dispose();
+    const seats = new THREE.InstancedMesh(seatGeometry, new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.62 }), 17 * 144);
+    const seatTransform = new THREE.Object3D();
+    const seatColors = [new THREE.Color('#d6b748'), new THREE.Color('#3d7058'), new THREE.Color('#34546b')];
+    let count = 0;
+    for (let row = 0; row < 17; row += 1) {
+      const step = new THREE.Mesh(new THREE.BoxGeometry(118, 0.62, 1.15), concrete);
+      step.position.set(0, row * 0.62, 52 + row * 1.15);
+      scene.add(step);
+      for (let column = 0; column < 144; column += 1) {
+        if (column % 36 < 2) continue;
+        seatTransform.position.set((column - 71.5) * 0.8, row * 0.62 + 0.68, 52 + row * 1.15);
+        seatTransform.updateMatrix();
+        seats.setMatrixAt(count, seatTransform.matrix);
+        seats.setColorAt(count, seatColors[Math.floor(column / 24) % seatColors.length]);
+        count += 1;
+      }
+    }
+    seats.count = count;
+    seats.instanceMatrix.needsUpdate = true;
+    seats.instanceColor.needsUpdate = true;
+    scene.add(seats);
+    const steel = new THREE.MeshStandardMaterial({ color: '#d0d9d7', metalness: 0.48, roughness: 0.48 });
+    const roof = new THREE.Mesh(
+      new THREE.BoxGeometry(35, 0.22, 14),
+      new THREE.MeshStandardMaterial({ color: '#9bc4c5', transparent: true, opacity: 0.72, roughness: 0.45, side: THREE.DoubleSide }),
+    );
+    roof.position.set(0, 12, -60);
+    scene.add(roof);
+    for (let x = -16; x <= 16; x += 4) {
+      const beam = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.25, 14), steel);
+      beam.position.set(x, 11.8, -60);
+      scene.add(beam);
+    }
+    for (const z of [-66.8, -60, -53.2]) {
+      const beam = new THREE.Mesh(new THREE.BoxGeometry(35, 0.22, 0.18), steel);
+      beam.position.set(0, 11.8, z);
+      scene.add(beam);
+    }
+    for (const x of [-17, 17]) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.22, 10, 0.22), steel);
+      post.position.set(x, 7, -66);
+      scene.add(post);
+    }
+    for (const x of [-52.5, 52.5]) {
+      const direction = x < 0 ? -1 : 1;
+      for (const z of [-3.66, 3.66]) {
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.44, 8), white);
+        post.position.set(x, 0.92, z);
+        scene.add(post);
+      }
+      const crossbar = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 7.32, 8), white);
+      crossbar.rotation.x = Math.PI / 2;
+      crossbar.position.set(x, 2.14, 0);
+      scene.add(crossbar);
+      const netLines = [];
+      for (let z = -3.6; z <= 3.61; z += 0.6) {
+        netLines.push(x, 2.14, z, x + direction * 2, 0, z);
+      }
+      for (let y = 0.4; y <= 2; y += 0.4) {
+        const backX = x + direction * (2 - y / 2.14 * 2);
+        netLines.push(backX, y, -3.66, backX, y, 3.66);
+      }
+      const netGeometry = new THREE.BufferGeometry();
+      netGeometry.setAttribute('position', new THREE.Float32BufferAttribute(netLines, 3));
+      scene.add(new THREE.LineSegments(netGeometry, new THREE.LineBasicMaterial({ color: '#cbd6d0', transparent: true, opacity: 0.65 })));
+    }
+    for (const x of [-58, 58]) {
+      const tower = new THREE.Mesh(new THREE.BoxGeometry(0.65, 28, 0.65), steel);
+      tower.position.set(x, 14, 78);
+      scene.add(tower);
+      const lamps = new THREE.Mesh(new THREE.BoxGeometry(5.5, 2.5, 0.45), steel);
+      lamps.position.set(x, 28, 78);
+      scene.add(lamps);
+    }
+    const railMaterial = new THREE.MeshStandardMaterial({ color: '#c6cfcb', metalness: 0.4, roughness: 0.5 });
+    for (let x = -16; x <= 16; x += 4) {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1, 6), railMaterial);
+      post.position.set(x, 0.5, -51);
+      scene.add(post);
+    }
+    for (const height of [0.45, 0.95]) {
+      const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 32, 6), railMaterial);
+      rail.rotation.z = Math.PI / 2;
+      rail.position.set(0, height, -51);
+      scene.add(rail);
+    }
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    const back = document.querySelector('#back');
+    const status = document.querySelector('#status');
+    const seatTargets = [];
+    const targets = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(0.76, 0.8, 1.05),
+      new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false }),
+      380,
+    );
+    const transform = new THREE.Object3D();
+    for (let row = 0; row < 10; row += 1) {
+      for (let column = 0; column < 40; column += 1) {
+        if (column === 19 || column === 20) continue;
+        transform.position.set((column - 19.5) * 0.78, row * 0.62 + 0.8, -53 - row * 1.15);
+        transform.updateMatrix();
+        targets.setMatrixAt(seatTargets.length, transform.matrix);
+        seatTargets.push({ row, column });
+      }
+    }
+    targets.instanceMatrix.needsUpdate = true;
+    let showingSeat = false;
+    let pointerStart;
+    let yaw = 0;
+    let pitch = 0;
+    let initialYaw = 0;
+    function showStand() {
+      showingSeat = false;
+      camera.position.set(28, 19, -23);
+      camera.fov = 45;
+      camera.updateProjectionMatrix();
+      controls.target.set(0, 3, -58);
+      controls.enabled = true;
+      controls.update();
+      status.textContent = 'Нажмите на кресло, чтобы увидеть поле с его позиции. Геометрия и нумерация условные.';
+      back.hidden = true;
+    }
+    showStand();
+    new GLTFLoader().load('/tribuna-tinypoly.glb', (model) => {
+      model.scene.traverse((object) => {
+        if (!object.isMesh) return;
+        object.geometry.computeBoundingBox();
+        const size = new THREE.Vector3();
+        object.geometry.boundingBox.getSize(size);
+        if (size.y < 1) object.material = concrete;
+      });
+      scene.add(model.scene);
+      scene.add(targets);
+    }, undefined, () => {
+      status.textContent = 'Не удалось загрузить модель трибуны.';
+    });
+    renderer.domElement.addEventListener('pointerdown', (event) => {
+      pointerStart = [event.clientX, event.clientY];
+      if (showingSeat) renderer.domElement.setPointerCapture(event.pointerId);
+    });
+    renderer.domElement.addEventListener('pointermove', (event) => {
+      if (!showingSeat || !pointerStart) return;
+      yaw = THREE.MathUtils.clamp(yaw - (event.clientX - pointerStart[0]) * 0.004, initialYaw - 1, initialYaw + 1);
+      pitch = THREE.MathUtils.clamp(pitch + (event.clientY - pointerStart[1]) * 0.004, -0.6, 0.6);
+      pointerStart = [event.clientX, event.clientY];
+      const direction = new THREE.Vector3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
+      camera.lookAt(camera.position.clone().add(direction));
+    });
+    renderer.domElement.addEventListener('pointerup', (event) => {
+      if (showingSeat) { pointerStart = null; return; }
+      if (!pointerStart || Math.hypot(event.clientX - pointerStart[0], event.clientY - pointerStart[1]) > 5) return;
+      const pointer = new THREE.Vector2(event.clientX / innerWidth * 2 - 1, -(event.clientY / innerHeight) * 2 + 1);
+      const raycaster = new THREE.Raycaster();
+      raycaster.setFromCamera(pointer, camera);
+      const hit = raycaster.intersectObject(targets)[0];
+      if (!hit) return;
+      const { row, column } = seatTargets[hit.instanceId];
+      const seat = column < 19 ? column + 1 : column - 1;
+      showingSeat = true;
+      controls.enabled = false;
+      camera.position.set((column - 19.5) * 0.78, row * 0.62 + 1.9, -53 - row * 1.15 + 0.3);
+      camera.fov = 64;
+      camera.updateProjectionMatrix();
+      camera.lookAt(0, 0, 0);
+      yaw = Math.atan2(-camera.position.x, -camera.position.z);
+      initialYaw = yaw;
+      pitch = Math.atan2(-camera.position.y, Math.hypot(camera.position.x, camera.position.z));
+      status.textContent = `Ряд ${row + 1} · место ${seat}. Перетащите, чтобы осмотреться. Вид и нумерация условные.`;
+      back.hidden = false;
+    });
+    back.addEventListener('click', showStand);
+    window.addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+    renderer.setAnimationLoop(() => renderer.render(scene, camera));
+  </script>
+</body>
+</html>

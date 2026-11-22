@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1110" viewBox="0 0 1600 1110" role="img" aria-labelledby="title desc">
+<title id="title">Центральный стадион Алматы — ориентировочная схема</title>
+<desc id="desc">Схема основных трибун и диапазонов секторов на основе схемы стадиона. Запад сверху, север справа. Геометрия и границы секторов условны.</desc>
+<rect width="1600" height="1110" fill="#f7f6f1"/>
+<g font-family="Arial, sans-serif">
+<text x="88" y="96" font-size="18" font-weight="700" letter-spacing="4" fill="#988a59">АЛМАТЫ  /  ИССЛЕДОВАНИЕ</text>
+<text x="88" y="157" font-size="47" font-weight="700" fill="#182821">Центральный стадион</text>
+<text x="88" y="193" font-size="22" fill="#556760">Ориентировочная схема трибун · не план посадочных мест</text>
+<rect x="84" y="236" width="1088" height="710" rx="34" fill="#eaece5"/>
+<!-- Данная схема намеренно не воспроизводит точные контуры или границы реальных секторов. -->
+<rect x="261" y="340" width="725" height="493" rx="245" fill="#66736a"/>
+<rect x="287" y="366" width="673" height="441" rx="218" fill="#c2c8b9"/>
+<rect x="309" y="389" width="629" height="395" rx="195" fill="#617870"/>
+<rect x="332" y="410" width="583" height="353" rx="174" fill="#a2a8a0"/>
+<rect x="347" y="425" width="553" height="323" rx="160" fill="#777e77"/>
+<g fill="none" stroke="#d1d5cc" opacity="0.7" stroke-width="1.5">
+<rect x="355" y="433" width="537" height="307" rx="152"/><rect x="363" y="441" width="521" height="291" rx="144"/><rect x="371" y="449" width="505" height="275" rx="136"/><rect x="379" y="457" width="489" height="259" rx="128"/>
+</g>
+<rect x="410" y="472" width="426" height="229" fill="#2a6c4d"/>
+<path d="M410 510h426 M410 548h426 M410 586h426 M410 624h426 M410 662h426" stroke="#ffffff" stroke-opacity=".05" stroke-width="21"/>
+<g stroke="#e9f3e9" stroke-width="3" fill="none" opacity=".84">
+<rect x="417" y="479" width="412" height="215"/><path d="M623 479v215"/><circle cx="623" cy="586.5" r="29"/><path d="M417 535h54v102h-54 M829 535h-54v102h54 M417 556h20v61h-20 M829 556h-20v61h20"/>
+</g>
+<circle cx="623" cy="586" r="3" fill="#e9f3e9"/>
+<!-- Обозначения - обзорные группы, а не точные размеры секторов. -->
+<rect x="446" y="335" width="356" height="22" rx="11" fill="#e6c66a"/>
+<text x="624" y="308" text-anchor="middle" font-size="23" font-weight="700" fill="#344b40">ЗАПАДНАЯ ТРИБУНА · КРЫША</text>
+<text x="624" y="895" text-anchor="middle" font-size="23" font-weight="700" fill="#344b40">ВОСТОЧНАЯ ТРИБУНА</text>
+<text x="211" y="585" text-anchor="middle" font-size="21" font-weight="700" fill="#344b40" transform="rotate(-90 211 585)">ЮЖНАЯ ТРИБУНА</text>
+<text x="1038" y="585" text-anchor="middle" font-size="21" font-weight="700" fill="#344b40" transform="rotate(90 1038 585)">СЕВЕРНАЯ ТРИБУНА</text>
+<rect x="1208" y="236" width="308" height="710" rx="34" fill="#18372c"/>
+<text x="1240" y="295" font-size="16" letter-spacing="2.4" font-weight="700" fill="#dfc978">ОРИЕНТИРЫ</text>
+<text x="1240" y="350" font-size="24" font-weight="700" fill="#fff">Запад</text>
+<text x="1240" y="379" font-size="18" fill="#cbd8ce">секторы 1–17*</text>
+<text x="1240" y="440" font-size="24" font-weight="700" fill="#fff">Север</text>
+<text x="1240" y="469" font-size="18" fill="#cbd8ce">секторы 18–28</text>
+<text x="1240" y="530" font-size="24" font-weight="700" fill="#fff">Восток</text>
+<text x="1240" y="559" font-size="18" fill="#cbd8ce">30–37 и 40–48</text>
+<text x="1240" y="620" font-size="24" font-weight="700" fill="#fff">Юг</text>
+<text x="1240" y="649" font-size="18" fill="#cbd8ce">секторы 49–60</text>
+<line x1="1240" y1="694" x2="1484" y2="694" stroke="#648274"/>
+<text x="1240" y="730" font-size="16" fill="#d9e2db">* Частично включает</text>
+<text x="1240" y="754" font-size="16" fill="#d9e2db">ложи. Номера 29, 38, 39</text>
+<text x="1240" y="778" font-size="16" fill="#d9e2db">не установлены.</text>
+<text x="1240" y="825" font-size="16" fill="#d9e2db">Ряды и места требуют</text>
+<text x="1240" y="849" font-size="16" fill="#d9e2db">отдельной проверки.</text>
+<text x="88" y="1007" font-size="19" font-weight="700" fill="#31483b">Основание: опубликованная схема Центрального стадиона Алматы</text>
+<text x="88" y="1041" font-size="17" fill="#68766c">Условный рисунок; масштаб, точные границы секторов и фактическое положение кресел не показаны.</text>
+<text x="88" y="1070" font-size="17" fill="#68766c">Ориентация как на официальной схеме: запад сверху, север справа. Актуальность номеров требует подтверждения.</text>
+</g></svg>

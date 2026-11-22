@@ -1,0 +1,711 @@
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
+import horizon from './horizon.json';
+import './style.css';
+
+const canvas = document.querySelector('#stadium');
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+} catch (error) {
+  document.querySelector('#error').hidden = false;
+  throw error;
+}
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;
+renderer.shadowMap.needsUpdate = true;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#a7c0c3');
+const horizonPositions = [];
+const horizonColors = [];
+const horizonFaces = [];
+const foothills = new THREE.Color('#657d83');
+const rockyPeak = new THREE.Color('#768f98');
+const snowyPeak = new THREE.Color('#d1d9d8');
+for (let i = 0; i < horizon.length; i += 1) {
+  const angle = i / horizon.length * Math.PI * 2;
+  const x = Math.cos(angle) * 450;
+  const z = Math.sin(angle) * 450;
+  let slope = 0;
+  let altitude = 0;
+  for (let offset = -2; offset <= 2; offset += 1) {
+    const sample = horizon[(i + offset + horizon.length) % horizon.length];
+    const weight = 3 - Math.abs(offset);
+    slope += sample[0] * weight / 9;
+    altitude += sample[1] * weight / 9;
+  }
+  const height = 8 + slope * 450;
+  const snow = THREE.MathUtils.clamp((altitude - 2700) / 1200, 0, 1);
+  const peak = rockyPeak.clone().lerp(snowyPeak, snow);
+  for (const [y, color] of [[-20, foothills], [Math.max(0, height * 0.65), rockyPeak], [height, peak]]) {
+    horizonPositions.push(x, y, z);
+    horizonColors.push(color.r, color.g, color.b);
+  }
+  const next = (i + 1) % horizon.length;
+  for (let level = 0; level < 2; level += 1) {
+    const a = i * 3 + level;
+    const b = next * 3 + level;
+    horizonFaces.push(a, b, a + 1, b, b + 1, a + 1);
+  }
+}
+const horizonGeometry = new THREE.BufferGeometry();
+horizonGeometry.setAttribute('position', new THREE.Float32BufferAttribute(horizonPositions, 3));
+horizonGeometry.setAttribute('color', new THREE.Float32BufferAttribute(horizonColors, 3));
+horizonGeometry.setIndex(horizonFaces);
+scene.add(new THREE.Mesh(horizonGeometry, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide })));
+
+new HDRLoader().load('/sky.hdr', (texture) => {
+  texture.mapping = THREE.EquirectangularReflectionMapping;
+  scene.background = texture;
+  scene.environment = texture;
+  scene.environmentIntensity = 0.45;
+}, undefined, (error) => console.error('Не удалось загрузить небо', error));
+const camera = new THREE.PerspectiveCamera(38, window.innerWidth / window.innerHeight, 0.1, 1000);
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true;
+controls.enablePan = false;
+controls.minDistance = 90;
+controls.maxDistance = 390;
+controls.maxPolarAngle = Math.PI / 2.2;
+controls.target.set(0, 4, 0);
+scene.add(new THREE.HemisphereLight('#f8f4dd', '#536765', 2.1));
+const sun = new THREE.DirectionalLight('#fff2d6', 2.7);
+sun.position.set(-85, 140, -70);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -135;
+sun.shadow.camera.right = 135;
+sun.shadow.camera.top = 115;
+sun.shadow.camera.bottom = -115;
+sun.shadow.camera.far = 350;
+sun.shadow.bias = -0.0002;
+scene.add(sun);
+
+const material = (color, roughness = 0.9) => new THREE.MeshStandardMaterial({ color, roughness });
+const grassTexture = new THREE.TextureLoader().load('/sports-turf.jpg', undefined, undefined, (error) => console.error('Не удалось загрузить текстуру газона', error));
+grassTexture.colorSpace = THREE.SRGBColorSpace;
+grassTexture.wrapS = THREE.RepeatWrapping;
+grassTexture.wrapT = THREE.RepeatWrapping;
+grassTexture.repeat.set(25, 16);
+grassTexture.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
+const grass = new THREE.MeshStandardMaterial({ map: grassTexture, roughness: 1 });
+const concreteTexture = new THREE.TextureLoader().load('/rough-concrete.jpg', undefined, undefined, (error) => console.error('Не удалось загрузить текстуру', error));
+concreteTexture.colorSpace = THREE.SRGBColorSpace;
+concreteTexture.wrapS = THREE.RepeatWrapping;
+concreteTexture.wrapT = THREE.RepeatWrapping;
+concreteTexture.repeat.set(5, 2);
+concreteTexture.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
+const concrete = new THREE.MeshStandardMaterial({ color: '#c4c9c4', map: concreteTexture, roughness: 1 });
+const darkConcrete = new THREE.MeshStandardMaterial({ color: '#aab3ad', map: concreteTexture, roughness: 1 });
+const trackNormal = new THREE.TextureLoader().load('/track-normal.jpg', undefined, undefined, (error) => console.error('Не удалось загрузить фактуру дорожек', error));
+trackNormal.wrapS = THREE.RepeatWrapping;
+trackNormal.wrapT = THREE.RepeatWrapping;
+trackNormal.repeat.set(0.5, 0.5);
+trackNormal.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
+const track = new THREE.MeshStandardMaterial({ color: '#397da5', roughness: 0.95, normalMap: trackNormal, normalScale: new THREE.Vector2(0.5, 0.5) });
+const white = material('#e8ead9');
+const yellowSeats = material('#dab13e', 0.58);
+const blueSeats = material('#3978a1', 0.58);
+const greenSeats = material('#65a48c', 0.58);
+const steel = material('#d8dbd2', 0.55);
+
+function box(width, height, depth, x, y, z, surface) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), surface);
+  mesh.position.set(x, y, z);
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+  return mesh;
+}
+
+function roundedPath(halfWidth, halfDepth, radius, path = new THREE.Path()) {
+  path.moveTo(-halfWidth + radius, -halfDepth);
+  path.lineTo(halfWidth - radius, -halfDepth);
+  path.quadraticCurveTo(halfWidth, -halfDepth, halfWidth, -halfDepth + radius);
+  path.lineTo(halfWidth, halfDepth - radius);
+  path.quadraticCurveTo(halfWidth, halfDepth, halfWidth - radius, halfDepth);
+  path.lineTo(-halfWidth + radius, halfDepth);
+  path.quadraticCurveTo(-halfWidth, halfDepth, -halfWidth, halfDepth - radius);
+  path.lineTo(-halfWidth, -halfDepth + radius);
+  path.quadraticCurveTo(-halfWidth, -halfDepth, -halfWidth + radius, -halfDepth);
+  return path;
+}
+
+function ring(outerWidth, outerDepth, innerWidth, innerDepth, radius, height, surface, thickness = 0) {
+  const shape = roundedPath(outerWidth, outerDepth, radius, new THREE.Shape());
+  shape.holes.push(roundedPath(innerWidth, innerDepth, Math.max(radius - (outerWidth - innerWidth), 1)));
+  const geometry = thickness
+    ? new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: false, curveSegments: 12 })
+    : new THREE.ShapeGeometry(shape, 16);
+  const mesh = new THREE.Mesh(geometry, surface);
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.y = height - thickness;
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+  return mesh;
+}
+
+// Геометрия чаши и места являются ориентировочными, а не измеренным планом.
+box(600, 0.5, 600, 0, -0.5, 0, material('#a2ae9c'));
+box(105, 0.12, 68, 0, 0, 0, grass);
+const mowingShade = new THREE.MeshBasicMaterial({ color: '#1c452c', transparent: true, opacity: 0.12, depthWrite: false });
+for (let strip = 0; strip < 5; strip += 1) {
+  const stripe = new THREE.Mesh(new THREE.PlaneGeometry(10.5, 68), mowingShade);
+  stripe.rotation.x = -Math.PI / 2;
+  stripe.position.set(-47.25 + strip * 21, 0.071, 0);
+  scene.add(stripe);
+}
+function line(x1, z1, x2, z2, width = 0.18) {
+  const length = Math.hypot(x2 - x1, z2 - z1);
+  const mesh = box(length, 0.025, width, (x1 + x2) / 2, 0.11, (z1 + z2) / 2, white);
+  mesh.rotation.y = -Math.atan2(z2 - z1, x2 - x1);
+}
+line(-52.5, -34, 52.5, -34); line(-52.5, 34, 52.5, 34);
+line(-52.5, -34, -52.5, 34); line(52.5, -34, 52.5, 34);
+line(0, -34, 0, 34);
+line(-52.5, -20, -36, -20); line(-36, -20, -36, 20); line(-36, 20, -52.5, 20);
+line(52.5, -20, 36, -20); line(36, -20, 36, 20); line(36, 20, 52.5, 20);
+line(-52.5, -9, -47, -9); line(-47, -9, -47, 9); line(-47, 9, -52.5, 9);
+line(52.5, -9, 47, -9); line(47, -9, 47, 9); line(47, 9, 52.5, 9);
+const circle = new THREE.Mesh(new THREE.RingGeometry(9, 9.16, 64), white);
+circle.rotation.x = -Math.PI / 2;
+circle.position.y = 0.12;
+scene.add(circle);
+
+ring(70, 52, 54, 35, 29, 0.04, track);
+for (let i = 0; i <= 8; i += 1) {
+  ring(55 + i * 1.22, 36 + i * 1.22, 54.94 + i * 1.22, 35.94 + i * 1.22, 16 + i * 1.22, 0.07, white);
+}
+ring(94, 76, 69, 51, 38, 0.02, darkConcrete);
+
+const rows = 34;
+const seatsPerRow = 800;
+const standLevels = [];
+const aisles = Array.from({ length: 8 }, () => []);
+const seatShape = new THREE.Shape();
+seatShape.moveTo(-0.23, -0.2);
+seatShape.lineTo(0.23, -0.2);
+seatShape.quadraticCurveTo(0.26, -0.2, 0.26, -0.14);
+seatShape.lineTo(0.23, 0.2);
+seatShape.lineTo(-0.23, 0.2);
+seatShape.lineTo(-0.26, -0.14);
+seatShape.quadraticCurveTo(-0.26, -0.2, -0.23, -0.2);
+const seatBase = new THREE.ExtrudeGeometry(seatShape, { depth: 0.05, bevelEnabled: true, bevelSegments: 1, steps: 1, bevelSize: 0.025, bevelThickness: 0.025, curveSegments: 2 });
+seatBase.rotateX(-Math.PI / 2);
+const backShape = new THREE.Shape();
+backShape.moveTo(-0.22, 0);
+backShape.lineTo(0.22, 0);
+backShape.lineTo(0.24, 0.43);
+backShape.quadraticCurveTo(0.24, 0.5, 0.17, 0.5);
+backShape.lineTo(-0.17, 0.5);
+backShape.quadraticCurveTo(-0.24, 0.5, -0.24, 0.43);
+backShape.lineTo(-0.22, 0);
+const seatBack = new THREE.ExtrudeGeometry(backShape, { depth: 0.05, bevelEnabled: true, bevelSegments: 1, steps: 1, bevelSize: 0.02, bevelThickness: 0.02, curveSegments: 2 });
+seatBack.rotateX(-0.12);
+seatBack.translate(0, 0.04, 0.18);
+const seatGeometry = mergeGeometries([seatBase, seatBack]);
+seatBase.dispose();
+seatBack.dispose();
+const yellow = new THREE.InstancedMesh(seatGeometry, yellowSeats, rows * seatsPerRow);
+const blue = new THREE.InstancedMesh(seatGeometry, blueSeats, rows * seatsPerRow);
+const green = new THREE.InstancedMesh(seatGeometry, greenSeats, rows * seatsPerRow);
+yellow.castShadow = true;
+blue.castShadow = true;
+green.castShadow = true;
+const hitGeometry = new THREE.BoxGeometry(0.7, 0.75, 0.85);
+hitGeometry.translate(0, 0.22, 0);
+const seatHits = new THREE.InstancedMesh(hitGeometry, new THREE.MeshBasicMaterial(), rows * seatsPerRow);
+seatHits.visible = false;
+const helper = new THREE.Object3D();
+const yellowData = [];
+const blueData = [];
+const greenData = [];
+const seats = [];
+let yellowCount = 0;
+let blueCount = 0;
+let greenCount = 0;
+for (let row = 0; row < rows; row += 1) {
+  const step = row * 0.72 + (row >= 15 ? 2 : 0);
+  const y = 0.45 + row * 0.37;
+  if (row === 15) ring(83.68, 65.68, 81.68, 63.68, 41.58, y - 0.37, darkConcrete, 0.38);
+  standLevels.push(ring(71.6 + step, 53.6 + step, 70.88 + step, 52.88 + step, 29.5 + step, y, row % 2 ? concrete : darkConcrete, 0.38));
+  const path = roundedPath(71 + step, 53 + step, 29 + step);
+  const points = path.getSpacedPoints(seatsPerRow);
+  for (let aisle = 0; aisle < aisles.length; aisle += 1) {
+    const point = points[aisle * 100 + 1];
+    aisles[aisle].push(new THREE.Vector3(point.x, y + 0.35, -point.y));
+  }
+  for (let i = 0; i < seatsPerRow; i += 1) {
+    if (i % 100 < 4) continue;
+    const point = points[i];
+    const next = points[i + 1];
+    helper.position.set(point.x, y + 0.27, -point.y);
+    helper.rotation.set(0, Math.atan2(next.y - point.y, next.x - point.x), 0);
+    helper.updateMatrix();
+    const stand = Math.abs(point.x) / (71 + step) > Math.abs(point.y) / (53 + step)
+      ? (point.x > 0 ? 'north' : 'south')
+      : (point.y > 0 ? 'west' : 'east');
+    if (stand === 'east' && (row === 13 || row === 14)) continue;
+    const seat = { stand, row: row + 1, position: helper.position.clone() };
+    seatHits.setMatrixAt(seats.length, helper.matrix);
+    seats.push(seat);
+    if ((stand === 'east' && row < 13) || (stand === 'south' && Math.floor(i / 16) % 2 === 0)) {
+      green.setMatrixAt(greenCount++, helper.matrix);
+      greenData.push(seat);
+    } else if ((stand === 'east' && row >= 15) || (stand !== 'east' && stand !== 'south' && Math.floor(i / 16) % 3 === 0)) {
+      blue.setMatrixAt(blueCount++, helper.matrix);
+      blueData.push(seat);
+    } else {
+      yellow.setMatrixAt(yellowCount++, helper.matrix);
+      yellowData.push(seat);
+    }
+  }
+}
+const standSectors = {
+  west: Array.from({ length: 17 }, (_, index) => index + 1),
+  north: Array.from({ length: 11 }, (_, index) => index + 18),
+  east: [...Array.from({ length: 8 }, (_, index) => index + 30), ...Array.from({ length: 9 }, (_, index) => index + 40)],
+  south: Array.from({ length: 12 }, (_, index) => index + 49),
+};
+for (const [stand, sectors] of Object.entries(standSectors)) {
+  for (let row = 1; row <= rows; row += 1) {
+    const rowSeats = seats.filter((seat) => seat.stand === stand && seat.row === row);
+    const rowSectors = stand === 'east' ? (row <= 13 ? sectors.slice(0, 8) : sectors.slice(8))
+      : stand === 'west' ? (row <= 15 ? sectors.slice(0, 9) : sectors.slice(9)) : sectors;
+    const numbers = new Map();
+    rowSeats.forEach((seat, index) => {
+      seat.sector = rowSectors[Math.floor(index * rowSectors.length / rowSeats.length)];
+      if ((stand === 'east' || stand === 'west') && row > 15) seat.row -= 15;
+      seat.number = (numbers.get(seat.sector) || 0) + 1;
+      numbers.set(seat.sector, seat.number);
+    });
+  }
+}
+// Эти пределы видны на схеме конкретного матча; размеры секторов остаются приблизительными.
+const hiddenMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
+for (const seat of seats) {
+  const shortSector = seat.stand === 'north' && seat.sector === 24;
+  const nineteenRows = (seat.stand === 'north' && seat.sector === 25)
+    || (seat.stand === 'south' && (seat.sector === 53 || seat.sector === 54));
+  if (shortSector && seat.row > 7) seat.hidden = true;
+  if (nineteenRows) {
+    const row = Math.round((seat.row - 1) * 18 / 33);
+    if (seat.row !== 1 + Math.round(row * 33 / 18)) seat.hidden = true;
+    else seat.row = row + 1;
+  }
+}
+for (const [mesh, data] of [[yellow, yellowData], [blue, blueData], [green, greenData], [seatHits, seats]]) {
+  data.forEach((seat, index) => {
+    if (seat.hidden) mesh.setMatrixAt(index, hiddenMatrix);
+  });
+}
+yellow.count = yellowCount;
+blue.count = blueCount;
+green.count = greenCount;
+yellow.instanceMatrix.needsUpdate = true;
+blue.instanceMatrix.needsUpdate = true;
+green.instanceMatrix.needsUpdate = true;
+seatHits.count = seats.length;
+seatHits.instanceMatrix.needsUpdate = true;
+scene.add(yellow, blue, green, seatHits);
+const aisleLines = [];
+for (const aisle of aisles) {
+  for (let row = 0; row < aisle.length - 1; row += 1) {
+    const start = aisle[row];
+    const end = aisle[row + 1];
+    aisleLines.push(start.x, start.y + 0.85, start.z, end.x, end.y + 0.85, end.z);
+    if (row % 4 === 0) aisleLines.push(start.x, start.y, start.z, start.x, start.y + 0.85, start.z);
+  }
+}
+const aisleGeometry = new THREE.BufferGeometry();
+aisleGeometry.setAttribute('position', new THREE.Float32BufferAttribute(aisleLines, 3));
+scene.add(new THREE.LineSegments(aisleGeometry, new THREE.LineBasicMaterial({ color: '#d9e0d9' })));
+
+// Пропорции навеса ориентировочные: измеренного чертежа пока нет.
+const booth = material('#b0b7b3');
+const boothGlass = new THREE.MeshStandardMaterial({ color: '#394f55', roughness: 0.25, metalness: 0.25 });
+box(24, 5.2, 4, 0, 14.2, -76, booth);
+for (const y of [13, 15.4]) {
+  for (let x = -9; x <= 9; x += 3) {
+    box(2.55, 1.7, 0.06, x, y, -73.97, boothGlass);
+  }
+}
+const roofMaterial = new THREE.MeshStandardMaterial({ color: '#8eb3bb', roughness: 0.45, metalness: 0.1, transparent: true, opacity: 0.65, depthWrite: false });
+const roof = box(104, 0.18, 20, 0, 18, -68, roofMaterial);
+roof.rotation.x = -0.04;
+const trussPoints = [];
+for (let x = -48; x <= 48; x += 12) {
+  box(0.3, 15, 0.3, x, 10, -77, steel);
+  box(0.22, 0.24, 20, x, 17.55, -68, steel);
+  for (let z = -77; z < -59; z += 3) {
+    trussPoints.push(x, 17.5, z, x, 16.3, z + 1.5, x, 16.3, z + 1.5, x, 17.5, z + 3);
+  }
+}
+for (let x = -48; x <= 48; x += 4) box(0.11, 0.15, 20, x, 17.8, -68, steel);
+for (const z of [-77, -68, -58]) box(104, 0.16, 0.16, 0, 17.65, z, steel);
+const trussGeometry = new THREE.BufferGeometry();
+trussGeometry.setAttribute('position', new THREE.Float32BufferAttribute(trussPoints, 3));
+scene.add(new THREE.LineSegments(trussGeometry, new THREE.LineBasicMaterial({ color: '#bcc9ca' })));
+const roofLights = new THREE.InstancedMesh(new THREE.BoxGeometry(0.75, 0.16, 0.25), new THREE.MeshStandardMaterial({ color: '#f5f2df', emissive: '#e5e0c7', emissiveIntensity: 0.45 }), 33);
+for (let i = 0; i < 33; i += 1) {
+  helper.position.set(-48 + i * 3, 17.45, -58.3);
+  helper.rotation.set(0, 0, 0);
+  helper.updateMatrix();
+  roofLights.setMatrixAt(i, helper.matrix);
+}
+roofLights.instanceMatrix.needsUpdate = true;
+scene.add(roofLights);
+for (const x of [-52.5, 52.5]) {
+  const direction = Math.sign(x);
+  for (const z of [-3.66, 3.66]) box(0.12, 2.44, 0.12, x, 1.22, z, white);
+  box(0.12, 0.12, 7.32, x, 2.44, 0, white);
+  const netLines = [];
+  for (let z = -3.6; z <= 3.61; z += 0.6) netLines.push(x, 2.44, z, x + direction * 2, 0, z);
+  for (let y = 0.4; y <= 2; y += 0.4) {
+    const backX = x + direction * (2 - y / 2.44 * 2);
+    netLines.push(backX, y, -3.66, backX, y, 3.66);
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(netLines, 3));
+  scene.add(new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ color: '#d5dfd6', transparent: true, opacity: 0.7 })));
+}
+const scoreboardFrame = material('#b7bcb7');
+const scoreboardScreen = material('#151d1d');
+for (const z of [-4.5, 4.5]) box(1, 10, 1, -99, 5, z, scoreboardFrame);
+box(1.2, 7.6, 15, -99, 13.8, 0, scoreboardFrame);
+box(0.08, 6.4, 13.7, -98.36, 13.8, 0, scoreboardScreen);
+const towerLines = [];
+const floodlights = new THREE.InstancedMesh(new THREE.BoxGeometry(0.65, 0.5, 0.22), new THREE.MeshStandardMaterial({ color: '#ecede4', emissive: '#d5d6c9', emissiveIntensity: 0.25 }), 84);
+let lightIndex = 0;
+for (const x of [-102, 102]) {
+  for (const z of [-90, 90]) {
+    for (const dx of [-1, 1]) {
+      for (const dz of [-1, 1]) {
+        towerLines.push(x + dx * 1.4, 0, z + dz * 1.4, x + dx * 0.7, 30, z + dz * 0.7);
+      }
+    }
+    for (let y = 0; y < 30; y += 3) {
+      const lower = 1.4 - y * 0.7 / 30;
+      const upper = 1.4 - (y + 3) * 0.7 / 30;
+      for (const side of [-1, 1]) {
+        towerLines.push(x + side * lower, y, z - lower, x + side * upper, y + 3, z + upper);
+        towerLines.push(x - lower, y, z + side * lower, x + upper, y + 3, z + side * upper);
+      }
+    }
+    const angle = Math.atan2(-x, -z);
+    const panel = box(7, 3.2, 0.35, x, 31.2, z, steel);
+    panel.rotation.y = angle;
+    for (let row = 0; row < 3; row += 1) {
+      for (let column = 0; column < 7; column += 1) {
+        const along = (column - 3) * 0.85;
+        helper.position.set(x + Math.cos(angle) * along + Math.sin(angle) * 0.3, 30.35 + row * 0.85, z - Math.sin(angle) * along + Math.cos(angle) * 0.3);
+        helper.rotation.set(0, angle, 0);
+        helper.updateMatrix();
+        floodlights.setMatrixAt(lightIndex++, helper.matrix);
+      }
+    }
+  }
+}
+const towerGeometry = new THREE.BufferGeometry();
+towerGeometry.setAttribute('position', new THREE.Float32BufferAttribute(towerLines, 3));
+scene.add(new THREE.LineSegments(towerGeometry, new THREE.LineBasicMaterial({ color: '#b7c3c0' })), floodlights);
+floodlights.instanceMatrix.needsUpdate = true;
+for (const z of [-50.5, 50.5]) {
+  for (let x = -48; x <= 48; x += 4) box(0.06, 1.1, 0.06, x, 0.7, z, steel);
+  for (const y of [0.5, 1.15]) box(96, 0.06, 0.06, 0, y, z, steel);
+}
+
+const views = {
+  overview: { label: 'ОБЩИЙ ВИД', position: [180, 155, 220] },
+  west: { label: 'ЗАПАДНАЯ ТРИБУНА', position: [0, 27, 38], target: [0, 5, -70] },
+  east: { label: 'ВОСТОЧНАЯ ТРИБУНА', position: [0, 27, -38], target: [0, 5, 70] },
+  north: { label: 'СЕВЕРНАЯ ТРИБУНА', position: [-38, 27, 0], target: [82, 5, 0] },
+  south: { label: 'ЮЖНАЯ ТРИБУНА', position: [38, 27, 0], target: [-82, 5, 0] },
+};
+let view = 'overview';
+let bookingOpen = false;
+let selectedSeat;
+let pointerStartX = 0;
+let pointerStartY = 0;
+let yaw = 0;
+let pitch = 0;
+let initialYaw = 0;
+let dragging = false;
+let lastX = 0;
+let lastY = 0;
+let cameraTransition;
+let firstView = true;
+function moveCamera(position, target, fov, orbit) {
+  const destination = camera.clone();
+  destination.position.copy(position);
+  destination.lookAt(target);
+  controls.enabled = false;
+  if (orbit) controls.target.copy(target);
+  const duration = firstView || matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 850;
+  firstView = false;
+  cameraTransition = {
+    start: performance.now(), duration, orbit,
+    fromPosition: camera.position.clone(), toPosition: position.clone(),
+    fromRotation: camera.quaternion.clone(), toRotation: destination.quaternion.clone(),
+    fromFov: camera.fov, toFov: fov,
+  };
+}
+function updateCameraFraming() {
+  if (bookingOpen && window.innerWidth <= 700) {
+    camera.setViewOffset(window.innerWidth, window.innerHeight, 0, Math.round(window.innerHeight * (view === 'seat' ? 0.16 : 0.22)), window.innerWidth, window.innerHeight);
+  } else if (bookingOpen) {
+    camera.setViewOffset(window.innerWidth, window.innerHeight, 180, 0, window.innerWidth, window.innerHeight);
+  } else {
+    camera.clearViewOffset();
+  }
+  camera.updateProjectionMatrix();
+}
+function lookFromSeat() {
+  const direction = new THREE.Vector3(Math.cos(pitch) * Math.cos(yaw), Math.sin(pitch), Math.cos(pitch) * Math.sin(yaw));
+  camera.lookAt(camera.position.clone().add(direction));
+}
+function setView(name) {
+  view = name;
+  document.querySelector('#stand-view').hidden = true;
+  const selected = views[name];
+  const target = name === 'overview' ? new THREE.Vector3(0, 4, 0) : new THREE.Vector3(...selected.target);
+  moveCamera(new THREE.Vector3(...selected.position), target, name === 'overview' ? 38 : 50, name === 'overview');
+  updateCameraFraming();
+  updateSeatHighlights();
+  document.querySelector('#app').classList.toggle('seat-mode', name !== 'overview');
+  document.querySelector('#current-view').textContent = selected.label;
+  document.querySelector('#hint').innerHTML = name === 'overview' ? 'ВЫБЕРИТЕ ТРИБУНУ <b>↗</b>' : 'НАЖМИТЕ НА КРЕСЛО <b>↗</b>';
+  document.querySelectorAll('.view-button').forEach((button) => {
+    const active = button.dataset.view === name;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+  });
+}
+const standSelect = document.querySelector('#stand-select');
+const sectorSelect = document.querySelector('#sector-select');
+const rowSelect = document.querySelector('#row-select');
+const seatSelect = document.querySelector('#seat-select');
+const standNames = { west: 'Западная трибуна', east: 'Восточная трибуна', north: 'Северная трибуна', south: 'Южная трибуна' };
+
+function updateSeatHighlights() {
+  const selected = new THREE.Color('#ffffff');
+  const muted = new THREE.Color('#aaaaaa');
+  const sector = Number(sectorSelect.value);
+  for (const [mesh, data] of [[yellow, yellowData], [blue, blueData], [green, greenData]]) {
+    data.forEach((seat, index) => {
+      const active = !bookingOpen || view === 'seat' || (seat.stand === standSelect.value && seat.sector === sector);
+      mesh.setColorAt(index, active ? selected : muted);
+    });
+    mesh.instanceColor.needsUpdate = true;
+  }
+}
+function updateSelectedSeat() {
+  selectedSeat = seats.find((seat) => !seat.hidden && seat.stand === standSelect.value && seat.sector === Number(sectorSelect.value) && seat.row === Number(rowSelect.value) && seat.number === Number(seatSelect.value));
+}
+function updateRowOptions(row = Number(rowSelect.value) || 1) {
+  const availableRows = [...new Set(seats.filter((seat) => !seat.hidden && seat.stand === standSelect.value && seat.sector === Number(sectorSelect.value)).map((seat) => seat.row))];
+  rowSelect.replaceChildren(...availableRows.map((number) => new Option(String(number), String(number))));
+  rowSelect.value = String(row);
+  if (!rowSelect.value) rowSelect.value = String(availableRows[0]);
+}
+function updateSeatOptions(number = 1) {
+  const choices = seats.filter((seat) => !seat.hidden && seat.stand === standSelect.value && seat.sector === Number(sectorSelect.value) && seat.row === Number(rowSelect.value));
+  seatSelect.replaceChildren(...choices.map((seat) => new Option(String(seat.number), String(seat.number))));
+  seatSelect.value = String(number);
+  if (!seatSelect.value && choices.length) seatSelect.value = String(choices[0].number);
+  updateSelectedSeat();
+}
+function updateSectorOptions(sector = standSectors[standSelect.value][0]) {
+  sectorSelect.replaceChildren(...standSectors[standSelect.value].map((number) => new Option(String(number), String(number))));
+  sectorSelect.value = String(sector);
+  updateRowOptions();
+  updateSeatOptions();
+  updateSeatHighlights();
+}
+function chooseSeat(seat) {
+  standSelect.value = seat.stand;
+  updateSectorOptions(seat.sector);
+  rowSelect.value = String(seat.row);
+  updateSeatOptions(seat.number);
+}
+function showSector() {
+  const row = Math.min(9, Number(rowSelect.lastElementChild.value));
+  const group = seats.filter((seat) => !seat.hidden && seat.stand === standSelect.value && seat.sector === Number(sectorSelect.value) && seat.row === row);
+  if (!group.length) return;
+  const center = new THREE.Vector3();
+  group.forEach((seat) => center.add(seat.position));
+  center.multiplyScalar(1 / group.length);
+  const towardsField = new THREE.Vector3(-center.x, 0, -center.z).normalize();
+  const position = center.clone().addScaledVector(towardsField, 24);
+  position.y = center.y + 6;
+  moveCamera(position, center, 46, false);
+  document.querySelector('#stand-view').hidden = false;
+}
+function showSeat() {
+  if (!selectedSeat) return;
+  view = 'seat';
+  document.querySelector('#stand-view').hidden = true;
+  updateSeatHighlights();
+  const position = selectedSeat.position.clone().add(new THREE.Vector3(0, 1, 0));
+  yaw = Math.atan2(-position.z, -position.x);
+  initialYaw = yaw;
+  pitch = -0.12;
+  const direction = new THREE.Vector3(Math.cos(pitch) * Math.cos(yaw), Math.sin(pitch), Math.cos(pitch) * Math.sin(yaw));
+  moveCamera(position, position.clone().add(direction), 64, false);
+  updateCameraFraming();
+  document.querySelector('#preview-place').textContent = `${standNames[selectedSeat.stand]} · сектор ${selectedSeat.sector} · ряд ${selectedSeat.row} · место ${selectedSeat.number}`;
+  showBookingStep('preview');
+  document.querySelector('#hint').innerHTML = 'ПЕРЕТАЩИТЕ, ЧТОБЫ ОСМОТРЕТЬСЯ <b>↗</b>';
+}
+function showBookingStep(step) {
+  document.querySelector('#seat-form').hidden = step !== 'seat';
+  document.querySelector('#seat-preview').hidden = step !== 'preview';
+  document.querySelector('#app').classList.toggle('preview-open', step === 'preview');
+  document.querySelector('#checkout').hidden = step !== 'checkout';
+  document.querySelector('#booking-complete').hidden = step !== 'complete';
+}
+standSelect.addEventListener('change', () => {
+  updateSectorOptions();
+  setView(standSelect.value);
+  document.querySelector('#seat-view').innerHTML = 'Посмотреть с места <span>↗</span>';
+});
+sectorSelect.addEventListener('change', () => {
+  updateRowOptions();
+  updateSeatOptions();
+  updateSeatHighlights();
+  if (view === 'seat') showSeat();
+  else showSector();
+});
+rowSelect.addEventListener('change', () => {
+  updateSeatOptions();
+  if (view === 'seat') showSeat();
+});
+seatSelect.addEventListener('change', () => {
+  updateSelectedSeat();
+  if (view === 'seat') showSeat();
+});
+function openBooking(stand) {
+  bookingOpen = true;
+  document.querySelector('#app').classList.add('booking-open');
+  document.querySelector('#booking-panel').hidden = false;
+  showBookingStep('seat');
+  if (stand) standSelect.value = stand;
+  updateSectorOptions();
+  setView(stand ? standSelect.value : 'overview');
+  document.querySelector('#seat-view').innerHTML = 'Посмотреть с места <span>↗</span>';
+}
+document.querySelectorAll('.view-button').forEach((button) => button.addEventListener('click', () => {
+  if (button.dataset.view === 'overview') setView('overview');
+  else openBooking(button.dataset.view);
+}));
+document.querySelector('#open-booking').addEventListener('click', () => openBooking(standSelect.value));
+document.querySelector('#close-booking').addEventListener('click', () => {
+  bookingOpen = false;
+  document.querySelector('#app').classList.remove('booking-open');
+  document.querySelector('#booking-panel').hidden = true;
+  setView('overview');
+});
+document.querySelector('#stand-view').addEventListener('click', () => setView(standSelect.value));
+document.querySelector('#seat-view').addEventListener('click', () => {
+  if (view === 'seat') {
+    setView(standSelect.value);
+    document.querySelector('#seat-view').innerHTML = 'Посмотреть с места <span>↗</span>';
+  } else showSeat();
+});
+function continueBooking() {
+  if (!selectedSeat) return;
+  document.querySelector('#seat-summary').textContent = `${standNames[selectedSeat.stand]} · сектор ${selectedSeat.sector} · ряд ${selectedSeat.row} · место ${selectedSeat.number}`;
+  showBookingStep('checkout');
+}
+document.querySelector('#continue-booking').addEventListener('click', continueBooking);
+document.querySelector('#preview-continue').addEventListener('click', continueBooking);
+document.querySelector('#preview-back').addEventListener('click', () => {
+  showBookingStep('seat');
+  setView(standSelect.value);
+  showSector();
+});
+document.querySelector('#back-booking').addEventListener('click', () => showBookingStep(view === 'seat' ? 'preview' : 'seat'));
+document.querySelector('#confirm-booking').addEventListener('click', () => showBookingStep('complete'));
+document.querySelector('#restart-booking').addEventListener('click', () => {
+  showBookingStep('seat');
+  setView(standSelect.value);
+});
+standSelect.value = 'west';
+updateSectorOptions();
+canvas.addEventListener('pointerdown', (event) => {
+  pointerStartX = event.clientX;
+  pointerStartY = event.clientY;
+  if (view !== 'seat' || cameraTransition) return;
+  dragging = true;
+  lastX = event.clientX;
+  lastY = event.clientY;
+  canvas.setPointerCapture(event.pointerId);
+});
+canvas.addEventListener('pointermove', (event) => {
+  if (!dragging || view !== 'seat') return;
+  yaw -= (event.clientX - lastX) * 0.004;
+  yaw = THREE.MathUtils.clamp(yaw, initialYaw - 0.6, initialYaw + 0.6);
+  pitch = THREE.MathUtils.clamp(pitch + (event.clientY - lastY) * 0.004, -0.35, 0.35);
+  lastX = event.clientX;
+  lastY = event.clientY;
+  lookFromSeat();
+});
+canvas.addEventListener('pointerup', (event) => {
+  dragging = false;
+  if (cameraTransition || view === 'seat' || Math.hypot(event.clientX - pointerStartX, event.clientY - pointerStartY) > 5) return;
+  const bounds = canvas.getBoundingClientRect();
+  const pointer = new THREE.Vector2((event.clientX - bounds.left) / bounds.width * 2 - 1, -(event.clientY - bounds.top) / bounds.height * 2 + 1);
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(pointer, camera);
+  if (view === 'overview') {
+    const hit = raycaster.intersectObjects(standLevels)[0];
+    if (!hit) return;
+    const point = hit.point;
+    const stand = Math.abs(point.x) / 80 > Math.abs(point.z) / 62
+      ? (point.x > 0 ? 'north' : 'south')
+      : (point.z < 0 ? 'west' : 'east');
+    openBooking(stand);
+    return;
+  }
+  if (!bookingOpen) return;
+  const hit = raycaster.intersectObject(seatHits)[0];
+  if (!hit) return;
+  const seat = seats[hit.instanceId];
+  if (!seat.hidden && seat.stand === standSelect.value) {
+    chooseSeat(seat);
+    showSeat();
+  }
+
+});
+canvas.addEventListener('pointercancel', () => { dragging = false; });
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  updateCameraFraming();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+setView('overview');
+renderer.setAnimationLoop(() => {
+  if (cameraTransition) {
+    const transition = cameraTransition;
+    const progress = transition.duration ? Math.min((performance.now() - transition.start) / transition.duration, 1) : 1;
+    const ease = progress * progress * (3 - 2 * progress);
+    camera.position.lerpVectors(transition.fromPosition, transition.toPosition, ease);
+    camera.quaternion.slerpQuaternions(transition.fromRotation, transition.toRotation, ease);
+    camera.fov = THREE.MathUtils.lerp(transition.fromFov, transition.toFov, ease);
+    camera.updateProjectionMatrix();
+    if (progress === 1) {
+      controls.enabled = transition.orbit;
+      cameraTransition = null;
+    }
+  }
+  if (controls.enabled) controls.update();
+  renderer.render(scene, camera);
+});

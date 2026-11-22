@@ -1,0 +1,35 @@
+- generic [ref=e2]:
+  - 'generic "Приблизительный обзор стадиона: 3D-модель и фотореалистичные эскизы трибун" [ref=e3]'
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]: C
+      - generic [ref=e7]: ЦЕНТРАЛЬНЫЙСТАДИОН · АЛМАТЫ
+    - button "Выбрать место ↗" [ref=e8] [cursor=pointer]
+  - main:
+    - generic [ref=e9]:
+      - paragraph [ref=e10]: АЛМАТЫ, КАЗАХСТАН
+      - generic [ref=e11]: ЗАПАДНАЯ ТРИБУНА
+    - region "Выбор трибуны" [ref=e14]:
+      - generic [ref=e15]:
+        - generic [ref=e16]: ВАША ТОЧКА ОБЗОРА
+        - generic [ref=e17]: AI-ВИЗУАЛИЗАЦИЯ
+      - generic [ref=e18]:
+        - button "Общий вид ↗" [ref=e19] [cursor=pointer]:
+          - generic [ref=e20]: Общий вид
+          - generic [ref=e21]: ↗
+        - button "Западная 01" [pressed] [ref=e22] [cursor=pointer]:
+          - generic [ref=e23]: Западная
+          - generic [ref=e24]: "01"
+        - button "Восточная 02" [ref=e25] [cursor=pointer]:
+          - generic [ref=e26]: Восточная
+          - generic [ref=e27]: "02"
+        - button "Северная 03" [ref=e28] [cursor=pointer]:
+          - generic [ref=e29]: Северная
+          - generic [ref=e30]: "03"
+        - button "Южная 04" [ref=e31] [cursor=pointer]:
+          - generic [ref=e32]: Южная
+          - generic [ref=e33]: "04"
+      - paragraph [ref=e34]: AI-эскиз по мотивам стадиона. Не фотография и не точный вид с места.
+  - contentinfo [ref=e35]:
+    - generic [ref=e36]: ЦЕНТРАЛЬНЫЙ СТАДИОН · АЛМАТЫ
+    - generic [ref=e37]: ПЕРЕТАЩИТЕ, ЧТОБЫ ОСМОТРЕТЬСЯ ↗

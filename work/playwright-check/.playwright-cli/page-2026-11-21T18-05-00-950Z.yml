@@ -1,0 +1,123 @@
+- generic [ref=e2]:
+  - 'generic "Приблизительный обзор стадиона: 3D-модель и фотореалистичные эскизы трибун" [ref=e3]'
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]: C
+      - generic [ref=e7]: ЦЕНТРАЛЬНЫЙСТАДИОН · АЛМАТЫ
+  - main
+  - complementary "Выбор места" [ref=e38]:
+    - generic [ref=e39]:
+      - generic [ref=e40]: CENTRAL STADIUM · ALMATY
+      - button "Закрыть выбор места" [ref=e41] [cursor=pointer]: ×
+    - generic [ref=e42]:
+      - heading "Найдите своё место." [level=2] [ref=e43]
+      - paragraph [ref=e44]: Выберите место в модели и посмотрите на поле с его позиции.
+      - generic [ref=e45]: Трибуна
+      - combobox "Трибуна" [ref=e46]:
+        - option "Западная" [selected]
+        - option "Восточная"
+        - option "Северная"
+        - option "Южная"
+      - generic [ref=e47]:
+        - generic [ref=e48]:
+          - generic [ref=e49]: Ряд
+          - combobox "Ряд" [ref=e50]:
+            - option "1" [selected]
+            - option "2"
+            - option "3"
+            - option "4"
+            - option "5"
+            - option "6"
+            - option "7"
+            - option "8"
+            - option "9"
+            - option "10"
+            - option "11"
+            - option "12"
+            - option "13"
+            - option "14"
+            - option "15"
+            - option "16"
+            - option "17"
+        - generic [ref=e51]:
+          - generic [ref=e52]: Место
+          - combobox "Место" [ref=e53]:
+            - option "1" [selected]
+            - option "2"
+            - option "3"
+            - option "4"
+            - option "5"
+            - option "6"
+            - option "7"
+            - option "8"
+            - option "9"
+            - option "10"
+            - option "11"
+            - option "12"
+            - option "13"
+            - option "14"
+            - option "15"
+            - option "16"
+            - option "17"
+            - option "18"
+            - option "19"
+            - option "20"
+            - option "21"
+            - option "22"
+            - option "23"
+            - option "24"
+            - option "25"
+            - option "26"
+            - option "27"
+            - option "28"
+            - option "29"
+            - option "30"
+            - option "31"
+            - option "32"
+            - option "33"
+            - option "34"
+            - option "35"
+            - option "36"
+            - option "37"
+            - option "38"
+            - option "39"
+            - option "40"
+            - option "41"
+            - option "42"
+            - option "43"
+            - option "44"
+            - option "45"
+            - option "46"
+            - option "47"
+            - option "48"
+            - option "49"
+            - option "50"
+            - option "51"
+            - option "52"
+            - option "53"
+            - option "54"
+            - option "55"
+            - option "56"
+            - option "57"
+            - option "58"
+            - option "59"
+            - option "60"
+            - option "61"
+            - option "62"
+            - option "63"
+            - option "64"
+            - option "65"
+            - option "66"
+            - option "67"
+            - option "68"
+            - option "69"
+            - option "70"
+            - option "71"
+            - option "72"
+      - button "К общему виду ↗" [active] [ref=e59] [cursor=pointer]:
+        - text: К общему виду
+        - generic [ref=e60]: ↗
+      - paragraph [ref=e56]: Места и нумерация условные. В общем виде можно нажать на кресло.
+      - button "Продолжить →" [ref=e57] [cursor=pointer]:
+        - text: Продолжить
+        - generic [ref=e58]: →
