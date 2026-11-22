@@ -20,7 +20,10 @@ try {
   document.querySelector('#error').hidden = false;
   throw error;
 }
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+// Телефоны и планшеты: меньше разрешение, без тяжёлых эффектов.
+const lowPower = window.matchMedia('(pointer: coarse)').matches;
+let pixelRatio = Math.min(window.devicePixelRatio, lowPower ? 1.25 : 1.5);
+renderer.setPixelRatio(pixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.shadowMap.enabled = true;
@@ -69,7 +72,9 @@ const horizonGeometry = new THREE.BufferGeometry();
 horizonGeometry.setAttribute('position', new THREE.Float32BufferAttribute(horizonPositions, 3));
 horizonGeometry.setAttribute('color', new THREE.Float32BufferAttribute(horizonColors, 3));
 horizonGeometry.setIndex(horizonFaces);
-scene.add(new THREE.Mesh(horizonGeometry, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide })));
+const horizonMesh = new THREE.Mesh(horizonGeometry, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }));
+horizonMesh.layers.set(1);
+scene.add(horizonMesh);
 
 new HDRLoader().load('/sky.hdr', (texture) => {
   texture.mapping = THREE.EquirectangularReflectionMapping;
@@ -78,6 +83,7 @@ new HDRLoader().load('/sky.hdr', (texture) => {
   scene.environmentIntensity = 0.45;
 }, undefined, (error) => console.error('Не удалось загрузить небо', error));
 const camera = new THREE.PerspectiveCamera(38, window.innerWidth / window.innerHeight, 0.1, 7500);
+camera.layers.enable(1);
 const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
 controls.enablePan = false;
@@ -90,7 +96,7 @@ scene.add(hemisphere);
 const sun = new THREE.DirectionalLight('#fff0d0', 2.6);
 sun.position.set(-85, 140, -70);
 sun.castShadow = true;
-const shadowSize = window.matchMedia('(pointer: coarse)').matches ? 2048 : 4096;
+const shadowSize = lowPower ? 2048 : 4096;
 sun.shadow.mapSize.set(shadowSize, shadowSize);
 sun.shadow.radius = 2.5;
 sun.shadow.camera.left = -135;
@@ -133,9 +139,11 @@ float wNoise(vec3 p) {
              mix(mix(wHash(i + vec3(0,0,1)), wHash(i + vec3(1,0,1)), f.x), mix(wHash(i + vec3(0,1,1)), wHash(i + vec3(1,1,1)), f.x), f.y), f.z);
 }`)
       .replace('#include <color_fragment>', `#include <color_fragment>
-float stain = wNoise(vWeatherPos * 0.35) * 0.6 + wNoise(vWeatherPos * 1.7) * 0.3 + wNoise(vWeatherPos * 7.0) * 0.1;
+${lowPower
+  ? 'float stain = wNoise(vWeatherPos * 0.35) * 0.7 + wNoise(vWeatherPos * 1.7) * 0.3;\ndiffuseColor.rgb *= mix(0.72, 1.08, stain);'
+  : `float stain = wNoise(vWeatherPos * 0.35) * 0.6 + wNoise(vWeatherPos * 1.7) * 0.3 + wNoise(vWeatherPos * 7.0) * 0.1;
 diffuseColor.rgb *= mix(0.72, 1.08, stain);
-diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.86, 0.9, 0.84), smoothstep(0.55, 0.8, wNoise(vWeatherPos * 0.9)));`);
+diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.86, 0.9, 0.84), smoothstep(0.55, 0.8, wNoise(vWeatherPos * 0.9)));`}`);
   };
   surface.needsUpdate = true;
 }
@@ -561,6 +569,7 @@ const modelLoader = new GLTFLoader();
 modelLoader.load('/alatau-terrain.glb', (model) => {
   model.scene.traverse((object) => {
     if (object.isMesh) object.material = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
+    object.layers.set(1);
   });
   scene.add(model.scene);
 }, undefined, (error) => console.error('Не удалось загрузить рельеф гор:', error));
@@ -1393,23 +1402,58 @@ setView('overview');
 // Затенение в контактах (ambient occlusion): тёмные стыки между рядами, креслами и ступенями.
 // Включается только на десктопе; ?fx=0 в адресе отключает эффект.
 if (location.search.includes('debug')) window.__debug = { renderer, scene, camera };
-const fpsWindow = { start: performance.now(), last: performance.now(), frames: 0, checks: 0 };
+// Эффект затенения в контактах: только на компьютерах и только в близких видах (сектор, место); ?fx=0 отключает.
 let composer;
-if (!window.matchMedia('(pointer: coarse)').matches && new URLSearchParams(location.search).get('fx') !== '0') {
+let aoCamera;
+if (!lowPower && new URLSearchParams(location.search).get('fx') !== '0') {
   const size = renderer.getDrawingBufferSize(new THREE.Vector2());
   const target = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 4 });
   composer = new EffectComposer(renderer, target);
   composer.addPass(new RenderPass(scene, camera));
-  const ao = new GTAOPass(scene, camera, window.innerWidth, window.innerHeight);
+  // Далёкий рельеф (слой 1) не участвует в расчёте затенения: на огромной дальности он давал чёрные пятна.
+  aoCamera = new THREE.PerspectiveCamera();
+  const ao = new GTAOPass(scene, aoCamera, window.innerWidth, window.innerHeight);
   ao.updateGtaoMaterial({ radius: 0.9, distanceExponent: 1.4, thickness: 1.2, scale: 1.1, samples: 16 });
   ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 8 });
   composer.addPass(ao);
   composer.addPass(new OutputPass());
 }
+
+// Рендер по требованию: пока ничего не меняется, сцена не перерисовывается (экономит батарею и нагрев).
+const maxPixelRatio = pixelRatio;
+let pixelCeiling = maxPixelRatio;
+let lastActivity = performance.now() + 8000;
+let lastRender = 0;
+let frameTotal = 0;
+let frameCount = 0;
+let lastResolutionChange = 0;
+let lastRaise = 0;
+let noRaiseUntil = 0;
+const markDirty = () => { lastActivity = performance.now(); };
+for (const name of ['pointerdown', 'pointermove', 'pointerup', 'wheel', 'keydown', 'click', 'touchstart', 'touchmove', 'change', 'resize']) {
+  window.addEventListener(name, markDirty, { passive: true, capture: true });
+}
+controls.addEventListener('change', markDirty);
+THREE.DefaultLoadingManager.onProgress = markDirty;
+THREE.DefaultLoadingManager.onLoad = markDirty;
+function applyPixelRatio(value) {
+  pixelRatio = value;
+  renderer.setPixelRatio(value);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  composer?.setPixelRatio(value);
+  composer?.setSize(window.innerWidth, window.innerHeight);
+}
 renderer.setAnimationLoop(() => {
+  const now = performance.now();
+  const active = Boolean(cameraTransition) || now - lastActivity < 1800;
+  const flagsLive = view === 'seat' && !reducedMotion;
+  if (!active && !flagsLive) return;
+  const gap = now - lastRender;
+  if (gap < (active ? 15 : 50)) return;
+  lastRender = now;
   if (cameraTransition) {
     const transition = cameraTransition;
-    const progress = transition.duration ? Math.min((performance.now() - transition.start) / transition.duration, 1) : 1;
+    const progress = transition.duration ? Math.min((now - transition.start) / transition.duration, 1) : 1;
     const ease = progress * progress * (3 - 2 * progress);
     camera.position.lerpVectors(transition.fromPosition, transition.toPosition, ease);
     camera.quaternion.slerpQuaternions(transition.fromRotation, transition.toRotation, ease);
@@ -1427,28 +1471,44 @@ renderer.setAnimationLoop(() => {
     camera.near = nearPlane;
     camera.updateProjectionMatrix();
   }
-  const clock = performance.now() / 1000;
-  for (const flag of reducedMotion ? [] : cornerFlags) {
-    flag.rotation.y = Math.sin(clock * 2.2 + flag.userData.phase) * 0.35;
-    flag.rotation.z = Math.sin(clock * 3.1 + flag.userData.phase) * 0.06;
+  if (!reducedMotion) {
+    const clock = now / 1000;
+    for (const flag of cornerFlags) {
+      flag.rotation.y = Math.sin(clock * 2.2 + flag.userData.phase) * 0.35;
+      flag.rotation.z = Math.sin(clock * 3.1 + flag.userData.phase) * 0.06;
+    }
   }
   if (controls.enabled) controls.update();
-  if (composer) {
-    // Если видеокарта не тянет затенение (меньше 22 кадров/с за 3 секунды), эффект отключается сам.
-    const stamp = performance.now();
-    // Пауза (вкладка была скрыта) не считается медленной работой: окно измерения начинается заново.
-    if (stamp - fpsWindow.last > 500) { fpsWindow.start = stamp; fpsWindow.frames = 0; }
-    fpsWindow.last = stamp;
-    if (stamp - fpsWindow.start > 3000) {
-      if (fpsWindow.frames > 0 && fpsWindow.frames / ((stamp - fpsWindow.start) / 1000) < 22 && fpsWindow.checks > 0) composer = null;
-      fpsWindow.start = stamp;
-      fpsWindow.frames = 0;
-      fpsWindow.checks += 1;
-    }
-    fpsWindow.frames += 1;
+  const aoActive = composer && (stage === 'sector' || stage === 'confirm' || view === 'seat');
+  if (aoActive) {
+    aoCamera.copy(camera, false);
+    aoCamera.layers.set(0);
+    composer.render();
   }
-  if (composer) composer.render();
   else renderer.render(scene, camera);
+
+  // Адаптивное разрешение: держим около 60 кадров/с. Если не тянет, разрешение снижается; затенение при <22 кадров/с отключается.
+  if (active && gap < 120) {
+    frameTotal += gap;
+    frameCount += 1;
+    if (frameCount >= 40) {
+      const average = frameTotal / frameCount;
+      frameTotal = 0;
+      frameCount = 0;
+      if (aoActive && average > 45) composer = null;
+      else if (average > 19 && pixelRatio > 0.65 && now - lastResolutionChange > 1200) {
+        const justRaised = now - lastRaise < 4000;
+        pixelCeiling = Math.max(0.65, pixelRatio * 0.88);
+        applyPixelRatio(pixelCeiling);
+        lastResolutionChange = now;
+        if (justRaised) noRaiseUntil = now + 30000;
+      } else if (average < 17.6 && pixelRatio < maxPixelRatio && now > noRaiseUntil && now - lastRaise > 8000) {
+        applyPixelRatio(Math.min(maxPixelRatio, pixelRatio + 0.1));
+        lastRaise = now;
+        lastResolutionChange = now;
+      }
+    }
+  }
 });
 
 // Переключатель времени суток: день и вечер (вечерний свет приблизительный).
