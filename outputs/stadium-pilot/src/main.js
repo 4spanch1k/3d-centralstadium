@@ -318,6 +318,23 @@ const circle = new THREE.Mesh(new THREE.RingGeometry(9, 9.16, 64), white);
 circle.rotation.x = -Math.PI / 2;
 circle.position.y = 0.12;
 scene.add(circle);
+// Пенальти: точки и дуги штрафной (размеры по правилам, 11 м и 9,15 м).
+const arcSpan = Math.acos(5.5 / 9.15);
+for (const side of [-1, 1]) {
+  const spot = new THREE.Mesh(new THREE.CircleGeometry(0.15, 16), white);
+  spot.rotation.x = -Math.PI / 2;
+  spot.position.set(side * 41.5, 0.125, 0);
+  scene.add(spot);
+  const arc = new THREE.Mesh(new THREE.RingGeometry(9.0, 9.16, 40, 1, side < 0 ? -arcSpan : Math.PI - arcSpan, arcSpan * 2), white);
+  arc.rotation.x = -Math.PI / 2;
+  arc.position.set(side * 41.5, 0.125, 0);
+  scene.add(arc);
+}
+const centerSpot = new THREE.Mesh(new THREE.CircleGeometry(0.2, 16), white);
+centerSpot.rotation.x = -Math.PI / 2;
+centerSpot.position.y = 0.125;
+scene.add(centerSpot);
+
 
 // Ворота, угловые флажки и рекламные борта (размеры стандартные, раскраска условная).
 for (const side of [-1, 1]) {
