@@ -110,6 +110,30 @@ concreteTexture.repeat.set(5, 2);
 concreteTexture.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
 const concrete = new THREE.MeshStandardMaterial({ color: '#b2b7b1', map: concreteTexture, roughness: 1 });
 const darkConcrete = new THREE.MeshStandardMaterial({ color: '#99a29c', map: concreteTexture, roughness: 1 });
+// Выцветание и разводы бетона: шум по мировым координатам, без отдельных текстур.
+function weather(surface) {
+  surface.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWeatherPos;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWeatherPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+varying vec3 vWeatherPos;
+float wHash(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
+float wNoise(vec3 p) {
+  vec3 i = floor(p); vec3 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(wHash(i), wHash(i + vec3(1,0,0)), f.x), mix(wHash(i + vec3(0,1,0)), wHash(i + vec3(1,1,0)), f.x), f.y),
+             mix(mix(wHash(i + vec3(0,0,1)), wHash(i + vec3(1,0,1)), f.x), mix(wHash(i + vec3(0,1,1)), wHash(i + vec3(1,1,1)), f.x), f.y), f.z);
+}`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+float stain = wNoise(vWeatherPos * 0.35) * 0.6 + wNoise(vWeatherPos * 1.7) * 0.3 + wNoise(vWeatherPos * 7.0) * 0.1;
+diffuseColor.rgb *= mix(0.72, 1.08, stain);
+diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.86, 0.9, 0.84), smoothstep(0.55, 0.8, wNoise(vWeatherPos * 0.9)));`);
+  };
+  surface.needsUpdate = true;
+}
+weather(concrete);
+weather(darkConcrete);
 const trackNormal = new THREE.TextureLoader().load('/track-normal.jpg', undefined, undefined, (error) => console.error('Не удалось загрузить фактуру дорожек', error));
 trackNormal.wrapS = THREE.RepeatWrapping;
 trackNormal.wrapT = THREE.RepeatWrapping;
