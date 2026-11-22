@@ -26,4 +26,4 @@ function saveExport() {
   };
 }
 
-export default defineConfig({ plugins: [saveExport()] });
+export default defineConfig({ base: './', plugins: [saveExport()] });

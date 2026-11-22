@@ -9,6 +9,8 @@ import greenery from './greenery.json';
 import './style.css';
 
 const initialHash = location.hash;
+// Все ресурсы берутся относительно базового адреса сборки: работает и в подпапке (например, GitHub Pages).
+const asset = (path) => import.meta.env.BASE_URL + path;
 const canvas = document.querySelector('#stadium');
 let renderer;
 try {
@@ -74,7 +76,7 @@ const horizonMesh = new THREE.Mesh(horizonGeometry, new THREE.MeshBasicMaterial(
 horizonMesh.layers.set(1);
 scene.add(horizonMesh);
 
-new HDRLoader().load('/sky.hdr', (texture) => {
+new HDRLoader().load(asset('sky.hdr'), (texture) => {
   texture.mapping = THREE.EquirectangularReflectionMapping;
   scene.background = texture;
   scene.environment = texture;
@@ -106,7 +108,7 @@ sun.shadow.bias = -0.0002;
 scene.add(sun);
 
 const material = (color, roughness = 0.9) => new THREE.MeshStandardMaterial({ color, roughness });
-const grassTexture = new THREE.TextureLoader().load('/sports-turf.webp', undefined, undefined, (error) => console.error('Не удалось загрузить текстуру газона', error));
+const grassTexture = new THREE.TextureLoader().load(asset('sports-turf.webp'), undefined, undefined, (error) => console.error('Не удалось загрузить текстуру газона', error));
 grassTexture.colorSpace = THREE.SRGBColorSpace;
 grassTexture.wrapS = THREE.RepeatWrapping;
 grassTexture.wrapT = THREE.RepeatWrapping;
@@ -124,8 +126,8 @@ function concreteMap(file, color = false) {
   texture.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
   return texture;
 }
-const concreteTexture = concreteMap('/concrete-diff.webp', true);
-const concreteExtras = lowPower ? {} : { normalMap: concreteMap('/concrete-normal.webp'), normalScale: new THREE.Vector2(0.7, 0.7), roughnessMap: concreteMap('/concrete-rough.webp') };
+const concreteTexture = concreteMap(asset('concrete-diff.webp'), true);
+const concreteExtras = lowPower ? {} : { normalMap: concreteMap(asset('concrete-normal.webp')), normalScale: new THREE.Vector2(0.7, 0.7), roughnessMap: concreteMap(asset('concrete-rough.webp')) };
 const concrete = new THREE.MeshStandardMaterial({ color: '#d6d9d3', map: concreteTexture, roughness: 1, ...concreteExtras });
 const darkConcrete = new THREE.MeshStandardMaterial({ color: '#bcc2bc', map: concreteTexture, roughness: 1, ...concreteExtras });
 // Выцветание и разводы бетона: шум по мировым координатам, без отдельных текстур.
@@ -154,7 +156,7 @@ diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.86, 0.9, 0.84
 }
 weather(concrete);
 weather(darkConcrete);
-const trackNormal = new THREE.TextureLoader().load('/track-normal.jpg', undefined, undefined, (error) => console.error('Не удалось загрузить фактуру дорожек', error));
+const trackNormal = new THREE.TextureLoader().load(asset('track-normal.jpg'), undefined, undefined, (error) => console.error('Не удалось загрузить фактуру дорожек', error));
 trackNormal.wrapS = THREE.RepeatWrapping;
 trackNormal.wrapT = THREE.RepeatWrapping;
 trackNormal.repeat.set(0.5, 0.5);
@@ -573,7 +575,7 @@ const green = new THREE.InstancedMesh(lowSeatGeometry, greenSeats, rows * seatsP
 const modelLoader = new GLTFLoader();
 // Горы подгружаются чуть позже первого кадра: стадион появляется быстрее, особенно на телефоне.
 setTimeout(() => {
-  modelLoader.load('/alatau-terrain.glb', (model) => {
+  modelLoader.load(asset('alatau-terrain.glb'), (model) => {
     model.scene.traverse((object) => {
       if (object.isMesh) object.material = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
       object.layers.set(1);
@@ -581,7 +583,7 @@ setTimeout(() => {
     scene.add(model.scene);
   }, undefined, (error) => console.error('Не удалось загрузить рельеф гор:', error));
 }, 1500);
-modelLoader.load('/stadium-seat.glb', (model) => {
+modelLoader.load(asset('stadium-seat.glb'), (model) => {
   const seat = model.scene.getObjectByName('Stadium_seat');
   if (!seat?.isMesh) {
     console.error('The stadium seat model does not contain a seat mesh.');
@@ -840,7 +842,7 @@ rails.castShadow = true;
 scene.add(rails);
 
 // Пропорции здания и навеса ориентировочные: измеренного чертежа пока нет.
-modelLoader.load('/west-building.glb', (model) => {
+modelLoader.load(asset('west-building.glb'), (model) => {
   model.scene.traverse((object) => {
     if (object.isMesh) {
       object.castShadow = true;
@@ -850,7 +852,7 @@ modelLoader.load('/west-building.glb', (model) => {
   scene.add(model.scene);
   renderer.shadowMap.needsUpdate = true;
 }, undefined, (error) => console.error('Не удалось загрузить здание трибуны:', error));
-modelLoader.load('/stadium-roof.glb', (model) => {
+modelLoader.load(asset('stadium-roof.glb'), (model) => {
   model.scene.traverse((object) => {
     if (object.isMesh) {
       object.castShadow = true;
@@ -1192,7 +1194,7 @@ let panoSphere;
 let panoNodeList = null;
 function loadPanoNodes() {
   if (!panoNodes) {
-    panoNodes = fetch('/panoramas/index.json').then((response) => (response.ok ? response.json() : [])).catch(() => []).then((list) => { panoNodeList = list; return list; });
+    panoNodes = fetch(asset('panoramas/index.json')).then((response) => (response.ok ? response.json() : Promise.reject(new Error('index')))).then((list) => { panoNodeList = list; return list; }).catch(() => { panoNodes = null; return []; });
   }
   return panoNodes;
 }
@@ -1229,6 +1231,10 @@ function applyPanorama(node, texture, position) {
   pitch = THREE.MathUtils.clamp(0.04, -panoPitchLimit, panoPitchLimit);
   camera.fov = fov;
   camera.updateProjectionMatrix();
+  // Камера уже в точке места, перелёт по живой сцене отменяется: иначе он продолжит тянуть взгляд к старому направлению.
+  cameraTransition = null;
+  controls.enabled = false;
+  camera.position.copy(position);
   lookFromSeat();
   markDirty();
 }
@@ -1253,6 +1259,8 @@ async function tryPanorama(position, token) {
   });
 }
 let panoToken = 0;
+// Номер версии набора панорам: меняйте при перерендере, чтобы кэш на устройствах обновился.
+const PANO_VERSION = 2;
 // На узком (портретном) экране угол обзора шире, чтобы в кадр попадало поле, а не только ряд кресел.
 const seatFov = () => (camera.aspect < 0.8 ? 80 : 64);
 const panoCacheLimit = lowPower ? 2 : 4;
@@ -1260,7 +1268,7 @@ const panoCacheLimit = lowPower ? 2 : 4;
 async function getPanoTexture(file) {
   let texture = panoTextures.get(file);
   if (texture) return texture;
-  texture = await new THREE.TextureLoader().loadAsync(`/panoramas/${file}`).catch(() => null);
+  texture = await new THREE.TextureLoader().loadAsync(asset(`panoramas/${file}?v=${PANO_VERSION}`)).catch(() => null);
   if (!texture) return null;
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
@@ -1543,23 +1551,26 @@ if (location.search.includes('debug')) {
   };
   window.__debug.exportScene = async (name = 'stadium-scene.glb') => {
     const { GLTFExporter } = await import('three/addons/exporters/GLTFExporter.js');
-    // Для рендера все кресла берутся детальными (с опорами), а не упрощёнными.
+    // Для рендера все кресла берутся детальными (с опорами), а не упрощёнными; при любой ошибке сцена возвращается как была.
     const lowGeometry = yellow.geometry;
-    for (const mesh of [yellow, blue, green]) mesh.geometry = detailSeatGeometry;
-    const exportLegs = new THREE.InstancedMesh(supportGeometry, detailLegs.material, seats.length);
-    seats.forEach((seat, index) => exportLegs.setMatrixAt(index, seat.hidden ? hiddenMatrix : seat.matrix));
-    scene.add(exportLegs);
     const hidden = [];
-    scene.traverse((object) => {
-      if (object.isPoints || object === seatMarker || object.parent === null) return;
-      if (object.isMesh && (object === sectorHits || object === seatHits)) { hidden.push([object, object.visible]); object.visible = false; }
-    });
-    const result = await new GLTFExporter().parseAsync(scene, { binary: true, onlyVisible: true, maxTextureSize: 1024 });
-    hidden.forEach(([object, visible]) => { object.visible = visible; });
-    for (const mesh of [yellow, blue, green]) mesh.geometry = lowGeometry;
-    scene.remove(exportLegs);
-    const response = await fetch(`/__save?name=${name}`, { method: 'POST', body: result });
-    return Number(await response.text());
+    let exportLegs;
+    try {
+      for (const mesh of [yellow, blue, green]) mesh.geometry = detailSeatGeometry;
+      exportLegs = new THREE.InstancedMesh(supportGeometry, detailLegs.material, seats.length);
+      seats.forEach((seat, index) => exportLegs.setMatrixAt(index, seat.hidden ? hiddenMatrix : seat.matrix));
+      scene.add(exportLegs);
+      scene.traverse((object) => {
+        if (object.isMesh && (object === sectorHits || object === seatHits)) { hidden.push([object, object.visible]); object.visible = false; }
+      });
+      const result = await new GLTFExporter().parseAsync(scene, { binary: true, onlyVisible: true, maxTextureSize: 1024 });
+      const response = await fetch(`/__save?name=${name}`, { method: 'POST', body: result });
+      return Number(await response.text());
+    } finally {
+      hidden.forEach(([object, visible]) => { object.visible = visible; });
+      for (const mesh of [yellow, blue, green]) mesh.geometry = lowGeometry;
+      if (exportLegs) scene.remove(exportLegs);
+    }
   };
 }
 // Эффект затенения в контактах: только на компьютерах и только в близких видах (сектор, место); ?fx=0 отключает.
@@ -1608,6 +1619,8 @@ let frameCount = 0;
 let lastResolutionChange = 0;
 let pendingPixelRatio = null;
 let aoStrikes = 0;
+let aoPausedUntil = 0;
+let aoPauses = 0;
 let lastRaise = 0;
 let noRaiseUntil = 0;
 const markDirty = () => { lastActivity = performance.now(); };
@@ -1633,7 +1646,7 @@ function applyPixelRatio(value) {
 renderer.setAnimationLoop(() => {
   const now = performance.now();
   const active = Boolean(cameraTransition) || now - lastActivity < 1800;
-  const flagsLive = view === 'seat' && !reducedMotion;
+  const flagsLive = view === 'seat' && !reducedMotion && !panoMode;
   if (!active && !flagsLive) return;
   const gap = now - lastRender;
   if (gap < (active ? 15 : 50)) return;
@@ -1672,7 +1685,7 @@ renderer.setAnimationLoop(() => {
   }
   if (controls.enabled) controls.update();
   const showingPano = panoMode && view === 'seat';
-  const aoActive = composer && !showingPano && (stage === 'sector' || stage === 'confirm' || view === 'seat');
+  const aoActive = composer && !showingPano && now >= aoPausedUntil && (stage === 'sector' || stage === 'confirm' || view === 'seat');
   if (showingPano) renderer.render(panoScene, camera);
   else if (aoActive) {
     aoCamera.copy(camera, false);
@@ -1692,7 +1705,13 @@ renderer.setAnimationLoop(() => {
       if (aoActive && average > 21) {
         // Сначала жертвуем затенением, а не чёткостью: картинка остаётся резкой.
         aoStrikes += 1;
-        if (aoStrikes >= 2) composer = null;
+        if (aoStrikes >= 2) {
+          // Затенение отключается на 90 секунд (возможно, вкладку лишь притормозили); после трёх пауз отключается совсем.
+          aoStrikes = 0;
+          aoPauses += 1;
+          aoPausedUntil = now + 90000;
+          if (aoPauses >= 3) composer = null;
+        }
       } else if (average > 19 && pixelRatio > minPixelRatio && now - lastResolutionChange > 1200) {
         const justRaised = now - lastRaise < 4000;
         pixelCeiling = Math.max(minPixelRatio, pixelRatio * 0.9);
@@ -1774,13 +1793,12 @@ renderer.setAnimationLoop(() => {
 }
 
 // Ссылка на место: #трибуна/сектор/ряд/место (например #west/5/7/12). Открывается сразу в виде с места.
-const hashParts = () => initialHash.replace('#', '').split('/');
 function updateHash() {
   if (view === 'seat' && selectedSeat) history.replaceState(null, '', `${location.pathname}${location.search}#${selectedSeat.stand}/${selectedSeat.sector}/${selectedSeat.row}/${selectedSeat.number}`);
   else if (location.hash) history.replaceState(null, '', location.pathname + location.search);
 }
-function openFromHash() {
-  const [stand, sector, row, number] = hashParts();
+function openFromHash(hash = initialHash) {
+  const [stand, sector, row, number] = hash.replace('#', '').split('/');
   if (!standNames[stand]) return;
   const seat = seats.find((item) => !item.hidden && item.stand === stand && item.sector === Number(sector) && item.row === Number(row) && item.number === Number(number));
   if (!seat) return;
@@ -1790,6 +1808,8 @@ function openFromHash() {
   showSeat();
 }
 openFromHash();
+// Ссылка на место, вставленная в адресную строку уже открытой вкладки (меняется только #): открываем без перезагрузки.
+window.addEventListener('hashchange', () => { if (location.hash) openFromHash(location.hash); });
 window.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape' || !bookingOpen) return;
   if (view === 'seat') document.querySelector('#preview-back').click();
@@ -1802,7 +1822,7 @@ document.querySelector('#close-booking').addEventListener('click', updateHash);
 
 // Кэш панорам в браузере (только в собранной версии): повторные заходы быстрее и дешевле по трафику.
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+  window.addEventListener('load', () => navigator.serviceWorker.register(asset('sw.js')).catch(() => {}));
 }
 
 // Соседние места: в виде с места стрелки (и кнопки) переходят к креслу слева/справа и на ряд выше/ниже, чтобы сравнить виды.
