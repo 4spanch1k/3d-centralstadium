@@ -707,37 +707,50 @@ for (const [mesh, data] of [[yellow, yellowData], [blue, blueData], [green, gree
     if (seat.position.y > entry.y - 0.2) entry.items.push(seat.position);
     topBySector.set(seat.sector, entry);
   }
-  const signMaterials = new Map();
-  for (const [sector, entry] of topBySector) {
+  // Все таблички рисуются на одном атласе: один материал вместо десятков.
+  const sectorsList = [...topBySector.keys()];
+  const columns = 8;
+  const atlasRows = Math.ceil(sectorsList.length / columns);
+  const atlasCanvas = document.createElement('canvas');
+  atlasCanvas.width = columns * 128;
+  atlasCanvas.height = atlasRows * 64;
+  const atlasContext = atlasCanvas.getContext('2d');
+  sectorsList.forEach((sector, index) => {
+    const x = (index % columns) * 128;
+    const y = Math.floor(index / columns) * 64;
+    atlasContext.fillStyle = '#14181a';
+    atlasContext.fillRect(x, y, 128, 64);
+    atlasContext.strokeStyle = '#e0a617';
+    atlasContext.lineWidth = 4;
+    atlasContext.strokeRect(x + 2, y + 2, 124, 60);
+    atlasContext.fillStyle = '#f4f1e2';
+    atlasContext.font = '700 42px system-ui, sans-serif';
+    atlasContext.textAlign = 'center';
+    atlasContext.textBaseline = 'middle';
+    atlasContext.fillText(String(sector), x + 64, y + 35);
+  });
+  const atlasTexture = new THREE.CanvasTexture(atlasCanvas);
+  atlasTexture.colorSpace = THREE.SRGBColorSpace;
+  atlasTexture.anisotropy = 4;
+  const signMaterial = new THREE.MeshBasicMaterial({ map: atlasTexture });
+  sectorsList.forEach((sector, index) => {
+    const entry = topBySector.get(sector);
     const center = new THREE.Vector3();
     entry.items.forEach((position) => center.add(position));
     center.divideScalar(entry.items.length);
     const outward = new THREE.Vector3(center.x, 0, center.z).normalize();
-    if (!signMaterials.has(sector)) {
-      const signCanvas = document.createElement('canvas');
-      signCanvas.width = 128;
-      signCanvas.height = 64;
-      const signContext = signCanvas.getContext('2d');
-      signContext.fillStyle = '#14181a';
-      signContext.fillRect(0, 0, 128, 64);
-      signContext.strokeStyle = '#e0a617';
-      signContext.lineWidth = 4;
-      signContext.strokeRect(2, 2, 124, 60);
-      signContext.fillStyle = '#f4f1e2';
-      signContext.font = '700 42px system-ui, sans-serif';
-      signContext.textAlign = 'center';
-      signContext.textBaseline = 'middle';
-      signContext.fillText(String(sector), 64, 35);
-      const signTexture = new THREE.CanvasTexture(signCanvas);
-      signTexture.colorSpace = THREE.SRGBColorSpace;
-      signTexture.anisotropy = 4;
-      signMaterials.set(sector, new THREE.MeshBasicMaterial({ map: signTexture }));
+    const geometry = new THREE.PlaneGeometry(2.6, 1.3);
+    const uv = geometry.attributes.uv;
+    const column = index % columns;
+    const row = Math.floor(index / columns);
+    for (let i = 0; i < uv.count; i += 1) {
+      uv.setXY(i, (column + uv.getX(i)) / columns, 1 - (row + 1 - uv.getY(i)) / atlasRows);
     }
-    const sign = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 1.3), signMaterials.get(sector));
+    const sign = new THREE.Mesh(geometry, signMaterial);
     sign.position.set(center.x + outward.x * 1.4, entry.y + 2.1, center.z + outward.z * 1.4);
     sign.lookAt(0, sign.position.y, 0);
     scene.add(sign);
-  }
+  });
 }
 // Небольшой разброс яркости кресел: выгоревшие и более тёмные места.
 {
@@ -1336,6 +1349,46 @@ window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
   composer?.setSize(window.innerWidth, window.innerHeight);
 });
+// Объединение неподвижных мелких объектов с одним материалом: меньше вызовов отрисовки (особенно важно для телефонов).
+function mergeStatic() {
+  const keep = new Set([...cornerFlags, seatMarker]);
+  const standSet = new Set(standLevels);
+  const groups = new Map();
+  scene.updateMatrixWorld(true);
+  for (const child of [...scene.children]) {
+    if (!child.isMesh || child.isInstancedMesh || keep.has(child) || Array.isArray(child.material) || !child.visible) continue;
+    const attributes = Object.keys(child.geometry.attributes).sort().join(',');
+    const key = `${standSet.has(child) ? 'stand|' : ''}${child.material.uuid}|${child.castShadow}|${child.receiveShadow}|${child.renderOrder}|${child.geometry.index ? 'i' : 'n'}|${attributes}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(child);
+  }
+  standLevels.length = 0;
+  for (const [key, list] of groups) {
+    if (list.length < 2) {
+      if (key.startsWith('stand|')) standLevels.push(...list);
+      continue;
+    }
+    const geometries = list.map((mesh) => mesh.geometry.clone().applyMatrix4(mesh.matrixWorld));
+    const merged = mergeGeometries(geometries);
+    geometries.forEach((geometry) => geometry.dispose());
+    if (!merged) {
+      if (key.startsWith('stand|')) standLevels.push(...list);
+      continue;
+    }
+    const mesh = new THREE.Mesh(merged, list[0].material);
+    mesh.castShadow = list[0].castShadow;
+    mesh.receiveShadow = list[0].receiveShadow;
+    mesh.renderOrder = list[0].renderOrder;
+    for (const original of list) {
+      scene.remove(original);
+      original.geometry.dispose();
+    }
+    scene.add(mesh);
+    if (key.startsWith('stand|')) standLevels.push(mesh);
+  }
+}
+mergeStatic();
+
 setView('overview');
 // Затенение в контактах (ambient occlusion): тёмные стыки между рядами, креслами и ступенями.
 // Включается только на десктопе; ?fx=0 в адресе отключает эффект.
