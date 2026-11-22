@@ -14,60 +14,69 @@
     <div id="app">
       <canvas id="stadium" aria-label="Приблизительная 3D-модель стадиона и трибун"></canvas>
       <header class="topbar">
-        <div class="brand"><span class="brand-mark">C</span><span>ЦЕНТРАЛЬНЫЙ<br><small>СТАДИОН · АЛМАТЫ</small></span></div>
-        <button type="button" class="open-booking" id="open-booking">Выбрать место <span>↗</span></button>
+        <div class="brand"><span class="brand-mark">ЦС</span><span class="brand-text"><strong>Центральный стадион</strong><small>Алматы</small></span></div>
+        <button type="button" class="open-booking" id="open-booking">Выбрать место</button>
       </header>
       <main class="interface">
-        <div class="intro">
-          <p class="eyebrow">АЛМАТЫ, КАЗАХСТАН</p>
-          <h1>Увидеть<br>своими <em>глазами.</em></h1>
-          <p class="description">Выберите трибуну, затем нажмите на место, чтобы увидеть поле.</p>
-          <div class="view-label"><span class="view-dot"></span><span id="current-view">ОБЩИЙ ВИД</span></div>
-        </div>
+        <section class="intro">
+          <h1>Выберите место</h1>
+          <p class="description">Нажмите на трибуну на модели или выберите её внизу. Затем сектор и место: покажем вид на поле.</p>
+          <p class="view-label" id="current-view">Общий вид</p>
+        </section>
         <section class="controls" aria-label="Выбор трибуны">
-          <div class="controls-head"><span>ВАША ТОЧКА ОБЗОРА</span><span id="accuracy">ПРИМЕРНЫЙ ВИД</span></div>
           <div class="buttons">
-            <button type="button" class="view-button active" data-view="overview" aria-pressed="true"><span>Общий вид</span><span>↗</span></button>
-            <button type="button" class="view-button" data-view="west" aria-pressed="false"><span>Западная</span><span>01</span></button>
-            <button type="button" class="view-button" data-view="east" aria-pressed="false"><span>Восточная</span><span>02</span></button>
-            <button type="button" class="view-button" data-view="north" aria-pressed="false"><span>Северная</span><span>03</span></button>
-            <button type="button" class="view-button" data-view="south" aria-pressed="false"><span>Южная</span><span>04</span></button>
+            <button type="button" class="view-button active" data-view="overview" aria-pressed="true">Общий вид</button>
+            <button type="button" class="view-button" data-view="west" aria-pressed="false">Западная</button>
+            <button type="button" class="view-button" data-view="east" aria-pressed="false">Восточная</button>
+            <button type="button" class="view-button" data-view="north" aria-pressed="false">Северная</button>
+            <button type="button" class="view-button" data-view="south" aria-pressed="false">Южная</button>
           </div>
           <p class="notice" id="notice">Модель и точки обзора приблизительные. Вид с конкретного кресла пока не подтверждён. Рельеф: <a href="https://github.com/tilezen/joerd/blob/master/docs/attribution.md" target="_blank" rel="noopener noreferrer">Mapzen, USGS, NOAA</a>. Окружение: © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">участники OpenStreetMap</a>.</p>
         </section>
       </main>
       <aside class="booking-panel" id="booking-panel" aria-label="Выбор места" hidden>
-        <div class="panel-head"><span class="panel-kicker">CENTRAL STADIUM · ALMATY</span><button type="button" id="close-booking" class="close-button" aria-label="Закрыть выбор места">×</button></div>
+        <div class="panel-head"><h2 id="panel-title">Выбор места</h2><button type="button" id="close-booking" class="close-button" aria-label="Закрыть выбор места">×</button></div>
+        <ol class="steps" id="steps" aria-label="Шаги"><li data-step="stand">Трибуна</li><li data-step="sector">Сектор</li><li data-step="seat">Место</li><li data-step="view">Вид</li></ol>
         <div id="seat-form">
-          <div class="seat-title"><h2>Найдите<br>своё место.</h2><button type="button" class="back-action" id="stand-view" hidden>← Вся трибуна</button></div>
-          <p class="panel-copy">Выберите место в модели и посмотрите на поле с его позиции.</p>
-          <div class="seat-fields"><div><label for="stand-select">Трибуна</label><select id="stand-select"><option value="west">Западная</option><option value="east">Восточная</option><option value="north">Северная</option><option value="south">Южная</option></select></div><div><label for="sector-select">Сектор</label><select id="sector-select"></select></div></div>
-          <div class="seat-fields"><div><label for="row-select">Ряд</label><select id="row-select"></select></div><div><label for="seat-select">Место</label><select id="seat-select"></select></div></div>
-          <button type="button" class="secondary-action" id="seat-view">Посмотреть с места <span>↗</span></button>
+          <section id="stage-stand">
+            <p class="panel-copy">Выберите сектор в списке или нажмите на него на трибуне.</p>
+            <div class="chips" id="sector-chips" role="group" aria-label="Секторы"></div>
+          </section>
+          <section id="stage-sector" hidden>
+            <p class="panel-copy" id="sector-copy"></p>
+            <button type="button" class="link-action" id="stand-view">← Все секторы</button>
+          </section>
+          <section id="stage-confirm" hidden>
+            <div class="ticket-summary"><span>Выбранное место</span><strong id="confirm-place"></strong></div>
+            <p class="panel-copy">Это то место, которое вам нужно?</p>
+            <button type="button" class="primary-action" id="seat-view">Да, посмотреть с места</button>
+            <button type="button" class="secondary-action" id="seat-change">Выбрать другое</button>
+          </section>
+          <details class="manual" id="manual">
+            <summary>Выбрать по номерам</summary>
+            <div class="seat-fields"><div><label for="stand-select">Трибуна</label><select id="stand-select"><option value="west">Западная</option><option value="east">Восточная</option><option value="north">Северная</option><option value="south">Южная</option></select></div><div><label for="sector-select">Сектор</label><select id="sector-select"></select></div></div>
+            <div class="seat-fields"><div><label for="row-select">Ряд</label><select id="row-select"></select></div><div><label for="seat-select">Место</label><select id="seat-select"></select></div></div>
+          </details>
           <p class="panel-note">Границы секторов и нумерация мест приблизительные.</p>
-          <button type="button" class="primary-action" id="continue-booking">Продолжить <span>→</span></button>
         </div>
         <div id="seat-preview" hidden>
-          <h2>Вид с места.</h2>
           <p class="panel-copy" id="preview-place"></p>
           <p class="panel-note">Перетащите изображение, чтобы осмотреться. Вид и нумерация приблизительные.</p>
-          <div class="preview-actions"><button type="button" class="secondary-action" id="preview-back">← К креслам</button><button type="button" class="primary-action" id="preview-continue">Продолжить →</button></div>
+          <div class="preview-actions"><button type="button" class="secondary-action" id="preview-back">Другое место</button><button type="button" class="primary-action" id="preview-continue">Продолжить</button></div>
         </div>
         <div id="checkout" hidden>
-          <h2>Ваш выбор.</h2>
           <p class="panel-copy">Проверьте выбранное место.</p>
-          <div class="ticket-summary"><span>ЦЕНТРАЛЬНЫЙ СТАДИОН</span><strong id="seat-summary"></strong><small>Условная схема · Алматы</small></div>
+          <div class="ticket-summary"><span>Центральный стадион</span><strong id="seat-summary"></strong><small>Условная схема · Алматы</small></div>
           <p class="panel-note">Это демонстрация: оплата не проводится, билет не выпускается.</p>
-          <button type="button" class="primary-action" id="confirm-booking">Подтвердить <span>→</span></button>
-          <button type="button" class="back-action" id="back-booking">← Изменить место</button>
+          <button type="button" class="primary-action" id="confirm-booking">Подтвердить</button>
+          <button type="button" class="link-action" id="back-booking">← Изменить место</button>
         </div>
         <div id="booking-complete" hidden>
-          <h2>Готово.</h2>
           <p class="panel-copy">Демонстрация завершена. Настоящий билет не оформлен.</p>
-          <button type="button" class="secondary-action" id="restart-booking">Выбрать другое место <span>↗</span></button>
+          <button type="button" class="secondary-action" id="restart-booking">Выбрать другое место</button>
         </div>
       </aside>
-      <footer><span>ЦЕНТРАЛЬНЫЙ СТАДИОН · АЛМАТЫ</span><span id="hint">ПЕРЕТАЩИТЕ, ЧТОБЫ ОСМОТРЕТЬСЯ <b>↗</b></span></footer>
+      <p class="hint" id="hint">Выберите трибуну</p>
       <div id="error" role="alert" hidden>Не удалось открыть 3D-сцену. Попробуйте другой браузер или устройство.</div>
     </div>
     <script type="module" src="/src/main.js"></script>

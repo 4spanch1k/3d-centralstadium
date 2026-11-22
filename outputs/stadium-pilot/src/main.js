@@ -612,7 +612,7 @@ for (let row = 0; row < rows; row += 1) {
       : (point.y > 0 ? 'west' : 'east');
     if (stand === 'east' && (row === 13 || row === 14)) continue;
     if (stand === 'west' && Math.abs(point.x) < 12.5 && point.y > 72.5) continue;
-    const seat = { stand, row: row + 1, position: helper.position.clone() };
+    const seat = { stand, row: row + 1, position: helper.position.clone(), matrix: helper.matrix.clone() };
     seatHits.setMatrixAt(seats.length, helper.matrix);
     seatSupports.setMatrixAt(seats.length, helper.matrix);
     seats.push(seat);
@@ -892,13 +892,14 @@ for (const z of [-50.5, 50.5]) {
 }
 
 const views = {
-  overview: { label: 'ОБЩИЙ ВИД', position: [180, 155, 220] },
-  west: { label: 'ЗАПАДНАЯ ТРИБУНА', position: [0, 12, 30], target: [0, 8, -70] },
-  east: { label: 'ВОСТОЧНАЯ ТРИБУНА', position: [0, 27, -38], target: [0, 5, 70] },
-  north: { label: 'СЕВЕРНАЯ ТРИБУНА', position: [-38, 27, 0], target: [82, 5, 0] },
-  south: { label: 'ЮЖНАЯ ТРИБУНА', position: [38, 27, 0], target: [-82, 5, 0] },
+  overview: { label: 'Общий вид', position: [180, 155, 220] },
+  west: { label: 'Западная трибуна', position: [0, 12, 30], target: [0, 8, -70] },
+  east: { label: 'Восточная трибуна', position: [0, 27, -38], target: [0, 5, 70] },
+  north: { label: 'Северная трибуна', position: [-38, 27, 0], target: [82, 5, 0] },
+  south: { label: 'Южная трибуна', position: [38, 27, 0], target: [-82, 5, 0] },
 };
 let view = 'overview';
+let stage = 'stand';
 let bookingOpen = false;
 let selectedSeat;
 let pointerStartX = 0;
@@ -942,7 +943,9 @@ function lookFromSeat() {
 }
 function setView(name) {
   view = name;
-  document.querySelector('#stand-view').hidden = true;
+  stage = 'stand';
+  applySectorFilter(null);
+  clearMarker();
   const selected = views[name];
   const target = name === 'overview' ? new THREE.Vector3(0, 4, 0) : new THREE.Vector3(...selected.target);
   moveCamera(new THREE.Vector3(...selected.position), target, name === 'overview' ? 38 : 50, name === 'overview');
@@ -950,12 +953,13 @@ function setView(name) {
   updateSeatHighlights();
   document.querySelector('#app').classList.toggle('seat-mode', name !== 'overview');
   document.querySelector('#current-view').textContent = selected.label;
-  document.querySelector('#hint').innerHTML = name === 'overview' ? 'ВЫБЕРИТЕ ТРИБУНУ <b>↗</b>' : 'НАЖМИТЕ НА КРЕСЛО <b>↗</b>';
+  document.querySelector('#hint').textContent = name === 'overview' ? 'Выберите трибуну' : 'Нажмите на сектор';
   document.querySelectorAll('.view-button').forEach((button) => {
     const active = button.dataset.view === name;
     button.classList.toggle('active', active);
     button.setAttribute('aria-pressed', String(active));
   });
+  if (bookingOpen) renderStage();
 }
 const standSelect = document.querySelector('#stand-select');
 const sectorSelect = document.querySelector('#sector-select');
@@ -966,10 +970,9 @@ const standNames = { west: 'Западная трибуна', east: 'Восто�
 function updateSeatHighlights() {
   const selected = new THREE.Color('#ffffff');
   const muted = new THREE.Color('#aaaaaa');
-  const sector = Number(sectorSelect.value);
   for (const [mesh, data] of [[yellow, yellowData], [blue, blueData], [green, greenData]]) {
     data.forEach((seat, index) => {
-      const active = !bookingOpen || view === 'seat' || (seat.stand === standSelect.value && seat.sector === sector);
+      const active = !bookingOpen || view === 'seat' || seat.stand === standSelect.value;
       mesh.setColorAt(index, active ? selected : muted);
     });
     mesh.instanceColor.needsUpdate = true;
@@ -1004,23 +1007,94 @@ function chooseSeat(seat) {
   rowSelect.value = String(seat.row);
   updateSeatOptions(seat.number);
 }
+const seatMarker = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.3, 1.0), new THREE.MeshBasicMaterial({ color: '#ff8a00', transparent: true, opacity: 0.9, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+const markerBeam = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 6, 8), new THREE.MeshBasicMaterial({ color: '#ffd24a' }));
+markerBeam.position.y = 3.6;
+seatMarker.add(markerBeam);
+seatMarker.visible = false;
+seatMarker.renderOrder = 5;
+scene.add(seatMarker);
+const markerPosition = new THREE.Vector3();
+const markerScale = new THREE.Vector3();
+function showMarker(seat) {
+  seat.matrix.decompose(markerPosition, seatMarker.quaternion, markerScale);
+  seatMarker.position.copy(markerPosition).add(new THREE.Vector3(0, 0.38, 0));
+  seatMarker.visible = true;
+}
+function clearMarker() {
+  seatMarker.visible = false;
+}
+// В режиме сектора остальные места скрыты: остаются только места выбранного сектора.
+function applySectorFilter(sector) {
+  for (const [mesh, data] of [[yellow, yellowData], [blue, blueData], [green, greenData], [seatHits, seats], [seatSupports, seats]]) {
+    data.forEach((seat, index) => {
+      const visible = !seat.hidden && (sector == null || (seat.stand === standSelect.value && seat.sector === sector));
+      mesh.setMatrixAt(index, visible ? seat.matrix : hiddenMatrix);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+  }
+  seatHits.computeBoundingSphere();
+}
+function currentPlace() {
+  return `${standNames[selectedSeat.stand]} · сектор ${selectedSeat.sector} · ряд ${selectedSeat.row} · место ${selectedSeat.number}`;
+}
+const stepIndex = { stand: 1, sector: 2, confirm: 2, seat: 3 };
+function renderStage() {
+  const current = stepIndex[stage] ?? 1;
+  document.querySelectorAll('#steps li').forEach((item, index) => {
+    item.classList.toggle('done', index < current);
+    item.classList.toggle('current', index === current);
+  });
+  const sector = Number(sectorSelect.value);
+  document.querySelector('#panel-title').textContent = stage === 'seat' ? 'Вид с места'
+    : stage === 'stand' ? standNames[standSelect.value]
+    : `${standNames[standSelect.value]} · сектор ${sector}`;
+  document.querySelector('#stage-stand').hidden = stage !== 'stand';
+  document.querySelector('#stage-sector').hidden = stage !== 'sector';
+  document.querySelector('#stage-confirm').hidden = stage !== 'confirm';
+  document.querySelector('#sector-copy').textContent = `Нажмите на место в секторе ${sector}. Остальные сектора скрыты.`;
+  if (stage === 'confirm' && selectedSeat) document.querySelector('#confirm-place').textContent = currentPlace();
+  const chips = document.querySelector('#sector-chips');
+  chips.replaceChildren(...standSectors[standSelect.value].map((number) => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'chip';
+    chip.textContent = String(number);
+    chip.setAttribute('aria-label', `Сектор ${number}`);
+    chip.addEventListener('click', () => selectSector(number));
+    return chip;
+  }));
+  document.querySelector('#hint').textContent = { stand: 'Нажмите на сектор', sector: 'Нажмите на место', confirm: 'Подтвердите место в панели', seat: 'Перетащите, чтобы осмотреться' }[stage] || '';
+}
+function selectSector(sector) {
+  updateSectorOptions(sector);
+  stage = 'sector';
+  clearMarker();
+  applySectorFilter(Number(sectorSelect.value));
+  showSector();
+  renderStage();
+}
 function showSector() {
-  const row = Math.min(9, Number(rowSelect.lastElementChild.value));
-  const group = seats.filter((seat) => !seat.hidden && seat.stand === standSelect.value && seat.sector === Number(sectorSelect.value) && seat.row === row);
+  const group = seats.filter((seat) => !seat.hidden && seat.stand === standSelect.value && seat.sector === Number(sectorSelect.value));
   if (!group.length) return;
   const center = new THREE.Vector3();
   group.forEach((seat) => center.add(seat.position));
   center.multiplyScalar(1 / group.length);
+  let radius = 0;
+  group.forEach((seat) => { radius = Math.max(radius, seat.position.distanceTo(center)); });
+  const fov = 46;
   const towardsField = new THREE.Vector3(-center.x, 0, -center.z).normalize();
-  const position = center.clone().addScaledVector(towardsField, 24);
-  position.y = center.y + 6;
-  moveCamera(position, center, 46, false);
-  document.querySelector('#stand-view').hidden = false;
+  const distance = Math.max(radius / Math.tan(THREE.MathUtils.degToRad(fov / 2)) * 1.45, 24);
+  const position = center.clone().addScaledVector(towardsField, distance);
+  position.y = center.y + Math.min(radius * 0.4, 14);
+  moveCamera(position, center, fov, false);
 }
 function showSeat() {
   if (!selectedSeat) return;
   view = 'seat';
-  document.querySelector('#stand-view').hidden = true;
+  stage = 'seat';
+  applySectorFilter(null);
+  clearMarker();
   updateSeatHighlights();
   const position = selectedSeat.position.clone().add(new THREE.Vector3(0, 1, 0));
   yaw = Math.atan2(-position.z, -position.x);
@@ -1029,9 +1103,9 @@ function showSeat() {
   const direction = new THREE.Vector3(Math.cos(pitch) * Math.cos(yaw), Math.sin(pitch), Math.cos(pitch) * Math.sin(yaw));
   moveCamera(position, position.clone().add(direction), 64, false);
   updateCameraFraming();
-  document.querySelector('#preview-place').textContent = `${standNames[selectedSeat.stand]} · сектор ${selectedSeat.sector} · ряд ${selectedSeat.row} · место ${selectedSeat.number}`;
+  document.querySelector('#preview-place').textContent = currentPlace();
   showBookingStep('preview');
-  document.querySelector('#hint').innerHTML = 'ПЕРЕТАЩИТЕ, ЧТОБЫ ОСМОТРЕТЬСЯ <b>↗</b>';
+  renderStage();
 }
 function showBookingStep(step) {
   document.querySelector('#seat-form').hidden = step !== 'seat';
@@ -1039,27 +1113,35 @@ function showBookingStep(step) {
   document.querySelector('#app').classList.toggle('preview-open', step === 'preview');
   document.querySelector('#checkout').hidden = step !== 'checkout';
   document.querySelector('#booking-complete').hidden = step !== 'complete';
+  if (step === 'seat') renderStage();
+  if (step === 'preview') document.querySelector('#panel-title').textContent = 'Вид с места';
 }
 standSelect.addEventListener('change', () => {
   updateSectorOptions();
   setView(standSelect.value);
-  document.querySelector('#seat-view').innerHTML = 'Посмотреть с места <span>↗</span>';
 });
 sectorSelect.addEventListener('change', () => {
-  updateRowOptions();
-  updateSeatOptions();
-  updateSeatHighlights();
-  if (view === 'seat') showSeat();
-  else showSector();
+  if (view === 'seat') {
+    updateRowOptions();
+    updateSeatOptions();
+    updateSeatHighlights();
+    showSeat();
+  } else selectSector(Number(sectorSelect.value));
 });
-rowSelect.addEventListener('change', () => {
-  updateSeatOptions();
-  if (view === 'seat') showSeat();
-});
-seatSelect.addEventListener('change', () => {
+function pickFromSelects() {
   updateSelectedSeat();
   if (view === 'seat') showSeat();
+  else if (selectedSeat && (stage === 'sector' || stage === 'confirm')) {
+    stage = 'confirm';
+    showMarker(selectedSeat);
+    renderStage();
+  }
+}
+rowSelect.addEventListener('change', () => {
+  updateSeatOptions();
+  pickFromSelects();
 });
+seatSelect.addEventListener('change', pickFromSelects);
 function openBooking(stand) {
   bookingOpen = true;
   document.querySelector('#app').classList.add('booking-open');
@@ -1068,7 +1150,6 @@ function openBooking(stand) {
   if (stand) standSelect.value = stand;
   updateSectorOptions();
   setView(stand ? standSelect.value : 'overview');
-  document.querySelector('#seat-view').innerHTML = 'Посмотреть с места <span>↗</span>';
 }
 document.querySelectorAll('.view-button').forEach((button) => button.addEventListener('click', () => {
   if (button.dataset.view === 'overview') setView('overview');
@@ -1082,23 +1163,23 @@ document.querySelector('#close-booking').addEventListener('click', () => {
   setView('overview');
 });
 document.querySelector('#stand-view').addEventListener('click', () => setView(standSelect.value));
-document.querySelector('#seat-view').addEventListener('click', () => {
-  if (view === 'seat') {
-    setView(standSelect.value);
-    document.querySelector('#seat-view').innerHTML = 'Посмотреть с места <span>↗</span>';
-  } else showSeat();
+document.querySelector('#seat-view').addEventListener('click', showSeat);
+document.querySelector('#seat-change').addEventListener('click', () => {
+  stage = 'sector';
+  clearMarker();
+  renderStage();
+  showSector();
 });
 function continueBooking() {
   if (!selectedSeat) return;
-  document.querySelector('#seat-summary').textContent = `${standNames[selectedSeat.stand]} · сектор ${selectedSeat.sector} · ряд ${selectedSeat.row} · место ${selectedSeat.number}`;
+  document.querySelector('#seat-summary').textContent = currentPlace();
   showBookingStep('checkout');
 }
-document.querySelector('#continue-booking').addEventListener('click', continueBooking);
 document.querySelector('#preview-continue').addEventListener('click', continueBooking);
 document.querySelector('#preview-back').addEventListener('click', () => {
   showBookingStep('seat');
   setView(standSelect.value);
-  showSector();
+  selectSector(Number(sectorSelect.value));
 });
 document.querySelector('#back-booking').addEventListener('click', () => showBookingStep(view === 'seat' ? 'preview' : 'seat'));
 document.querySelector('#confirm-booking').addEventListener('click', () => showBookingStep('complete'));
@@ -1147,10 +1228,15 @@ canvas.addEventListener('pointerup', (event) => {
   const hit = raycaster.intersectObject(seatHits)[0];
   if (!hit) return;
   const seat = seats[hit.instanceId];
-  if (!seat.hidden && seat.stand === standSelect.value) {
-    chooseSeat(seat);
-    showSeat();
+  if (seat.hidden || seat.stand !== standSelect.value) return;
+  if (stage === 'stand') {
+    selectSector(seat.sector);
+    return;
   }
+  chooseSeat(seat);
+  stage = 'confirm';
+  showMarker(seat);
+  renderStage();
 
 });
 canvas.addEventListener('pointercancel', () => { dragging = false; });
@@ -1201,7 +1287,7 @@ renderer.setAnimationLoop(() => {
   toggle.textContent = 'День';
   toggle.setAttribute('aria-label', 'Переключить время суток');
   toggle.setAttribute('aria-pressed', 'false');
-  toggle.style.cssText = 'position:fixed;top:82px;right:4.5%;z-index:2;padding:8px 14px;border:1px solid rgba(244,241,226,.4);background:rgba(21,35,29,.82);color:#f4f1e2;font:600 12px system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;';
+  toggle.className = 'time-toggle';
   // Ореолы вокруг прожекторов: видны только вечером.
   const glowCanvas = document.createElement('canvas');
   glowCanvas.width = 64;
