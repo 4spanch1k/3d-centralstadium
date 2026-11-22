@@ -642,6 +642,48 @@ for (const [mesh, data] of [[yellow, yellowData], [blue, blueData], [green, gree
     if (seat.hidden) mesh.setMatrixAt(index, hiddenMatrix);
   });
 }
+// Таблички с номерами секторов над верхним рядом каждого сектора (положение ориентировочное).
+{
+  const topBySector = new Map();
+  for (const seat of seats) {
+    if (seat.hidden || !seat.sector) continue;
+    const entry = topBySector.get(seat.sector) || { y: -Infinity, items: [] };
+    if (seat.position.y > entry.y + 0.2) { entry.y = seat.position.y; entry.items = []; }
+    if (seat.position.y > entry.y - 0.2) entry.items.push(seat.position);
+    topBySector.set(seat.sector, entry);
+  }
+  const signMaterials = new Map();
+  for (const [sector, entry] of topBySector) {
+    const center = new THREE.Vector3();
+    entry.items.forEach((position) => center.add(position));
+    center.divideScalar(entry.items.length);
+    const outward = new THREE.Vector3(center.x, 0, center.z).normalize();
+    if (!signMaterials.has(sector)) {
+      const signCanvas = document.createElement('canvas');
+      signCanvas.width = 128;
+      signCanvas.height = 64;
+      const signContext = signCanvas.getContext('2d');
+      signContext.fillStyle = '#14181a';
+      signContext.fillRect(0, 0, 128, 64);
+      signContext.strokeStyle = '#e0a617';
+      signContext.lineWidth = 4;
+      signContext.strokeRect(2, 2, 124, 60);
+      signContext.fillStyle = '#f4f1e2';
+      signContext.font = '700 42px system-ui, sans-serif';
+      signContext.textAlign = 'center';
+      signContext.textBaseline = 'middle';
+      signContext.fillText(String(sector), 64, 35);
+      const signTexture = new THREE.CanvasTexture(signCanvas);
+      signTexture.colorSpace = THREE.SRGBColorSpace;
+      signTexture.anisotropy = 4;
+      signMaterials.set(sector, new THREE.MeshBasicMaterial({ map: signTexture }));
+    }
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 1.3), signMaterials.get(sector));
+    sign.position.set(center.x + outward.x * 1.4, entry.y + 2.1, center.z + outward.z * 1.4);
+    sign.lookAt(0, sign.position.y, 0);
+    scene.add(sign);
+  }
+}
 // Небольшой разброс яркости кресел: выгоревшие и более тёмные места.
 {
   let seed = 11;
