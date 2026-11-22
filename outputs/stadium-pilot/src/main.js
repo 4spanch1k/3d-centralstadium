@@ -319,7 +319,7 @@ farGround.rotation.x = -Math.PI / 2;
 farGround.position.y = -0.8;
 scene.add(farGround);
 box(105, 0.12, 68, 0, 0, 0, grass);
-const mowingShade = new THREE.MeshBasicMaterial({ color: '#1c452c', transparent: true, opacity: 0.12, depthWrite: false });
+const mowingShade = new THREE.MeshBasicMaterial({ color: '#1c452c', transparent: true, opacity: 0.12, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
 for (let strip = 0; strip < 5; strip += 1) {
   const stripe = new THREE.Mesh(new THREE.PlaneGeometry(10.5, 68), mowingShade);
   stripe.rotation.x = -Math.PI / 2;
@@ -332,16 +332,16 @@ wearCanvas.width = 128;
 wearCanvas.height = 128;
 const wearContext = wearCanvas.getContext('2d');
 const wearGradient = wearContext.createRadialGradient(64, 64, 4, 64, 64, 62);
-wearGradient.addColorStop(0, 'rgba(92,78,48,0.55)');
-wearGradient.addColorStop(0.6, 'rgba(92,78,48,0.25)');
-wearGradient.addColorStop(1, 'rgba(92,78,48,0)');
+wearGradient.addColorStop(0, 'rgba(48,50,24,0.5)');
+wearGradient.addColorStop(0.6, 'rgba(48,50,24,0.22)');
+wearGradient.addColorStop(1, 'rgba(48,50,24,0)');
 wearContext.fillStyle = wearGradient;
 wearContext.fillRect(0, 0, 128, 128);
-const wearMaterial = new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(wearCanvas), transparent: true, depthWrite: false, roughness: 1 });
+const wearMaterial = new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(wearCanvas), transparent: true, depthWrite: false, roughness: 1, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
 for (const [x, z, width, depth] of [[-49, 0, 12, 20], [49, 0, 12, 20], [0, 0, 14, 14], [-30, 18, 10, 8], [28, -16, 10, 8]]) {
   const patch = new THREE.Mesh(new THREE.PlaneGeometry(width, depth), wearMaterial);
   patch.rotation.x = -Math.PI / 2;
-  patch.position.set(x, 0.074, z);
+  patch.position.set(x, 0.085, z);
   scene.add(patch);
 }
 function line(x1, z1, x2, z2, width = 0.18) {
@@ -733,6 +733,8 @@ seatSupports.count = seats.length;
 seatSupports.instanceMatrix.needsUpdate = true;
 aisleSteps.instanceMatrix.needsUpdate = true;
 aisleSteps.receiveShadow = true;
+// Меши из тысяч копий всегда видны целиком: отключаем отсечение по границам, чтобы кресла не исчезали при повороте.
+for (const instanced of [yellow, blue, green, seatHits, seatSupports, aisleSteps]) instanced.frustumCulled = false;
 scene.add(yellow, blue, green, seatHits, seatSupports, aisleSteps);
 // Выходы на верхней кромке чаши в конце каждого прохода (положение и размеры ориентировочные).
 {
@@ -1171,6 +1173,13 @@ renderer.setAnimationLoop(() => {
       controls.enabled = transition.orbit;
       cameraTransition = null;
     }
+  }
+  // Динамическая ближняя плоскость: на больших расстояниях слои с разницей в сантиметры не мерцают (z-fighting).
+  const orbitDistance = controls.enabled && !cameraTransition ? camera.position.distanceTo(controls.target) : 0;
+  const nearPlane = orbitDistance > 40 ? Math.min(orbitDistance * 0.02, 8) : 0.1;
+  if (Math.abs(camera.near - nearPlane) > 0.01) {
+    camera.near = nearPlane;
+    camera.updateProjectionMatrix();
   }
   const clock = performance.now() / 1000;
   for (const flag of reducedMotion ? [] : cornerFlags) {
