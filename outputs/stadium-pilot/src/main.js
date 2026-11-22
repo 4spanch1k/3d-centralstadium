@@ -595,7 +595,8 @@ seatHits.visible = false;
 const supportGeometry = new THREE.BoxGeometry(0.09, 0.25, 0.12);
 supportGeometry.translate(0, -0.15, 0.08);
 // Детальные кресла вблизи: отдельные небольшие меши только для нужных мест (сектор или окрестность кресла).
-const detailCapacity = 2400;
+const detailCapacity = lowPower ? 3200 : 7000;
+const detailRadius = lowPower ? 28 : 48;
 let detailSeatGeometry = seatGeometry;
 const detailMeshes = {
   yellow: new THREE.InstancedMesh(seatGeometry, yellowSeats, detailCapacity),
@@ -1083,16 +1084,12 @@ function applyDetail(mode, origin) {
     const sector = Number(sectorSelect.value);
     for (const seat of seats) if (!seat.hidden && seat.stand === standSelect.value && seat.sector === sector) picked.push(seat);
   } else if (mode === 'near') {
-    for (const seat of seats) if (!seat.hidden && seat.position.distanceToSquared(origin) < 24 * 24) picked.push(seat);
+    for (const seat of seats) if (!seat.hidden && seat.position.distanceToSquared(origin) < detailRadius * detailRadius) picked.push(seat);
+    // Ближние места первыми: если лимит исчерпан, детальными остаются самые близкие к камере.
+    picked.sort((a, b) => a.position.distanceToSquared(origin) - b.position.distanceToSquared(origin));
   }
-  const chosen = new Set(picked);
-  const mainVisible = mode !== 'sector';
-  for (const [mesh, data] of [[yellow, yellowData], [blue, blueData], [green, greenData]]) {
-    mesh.visible = mainVisible;
-    if (!mainVisible) continue;
-    data.forEach((seat, index) => mesh.setMatrixAt(index, !seat.hidden && !chosen.has(seat) ? seat.matrix : hiddenMatrix));
-    mesh.instanceMatrix.needsUpdate = true;
-  }
+  // В детальные меши попадают только реально помещённые места; остальные остаются простыми, чтобы не было «дыр».
+  const placed = new Set();
   const counts = { yellow: 0, blue: 0, green: 0 };
   let legs = 0;
   sectorRefs.length = 0;
@@ -1102,6 +1099,14 @@ function applyDetail(mode, origin) {
     detailLegs.setMatrixAt(legs++, seat.matrix);
     sectorHits.setMatrixAt(sectorRefs.length, seat.matrix);
     sectorRefs.push(seat);
+    placed.add(seat);
+  }
+  const mainVisible = mode !== 'sector';
+  for (const [mesh, data] of [[yellow, yellowData], [blue, blueData], [green, greenData]]) {
+    mesh.visible = mainVisible;
+    if (!mainVisible) continue;
+    data.forEach((seat, index) => mesh.setMatrixAt(index, !seat.hidden && !placed.has(seat) ? seat.matrix : hiddenMatrix));
+    mesh.instanceMatrix.needsUpdate = true;
   }
   for (const [group, mesh] of Object.entries(detailMeshes)) {
     mesh.count = counts[group];
@@ -1414,7 +1419,7 @@ if (!lowPower && new URLSearchParams(location.search).get('fx') !== '0') {
   // Далёкий рельеф (слой 1) не участвует в расчёте затенения: на огромной дальности он давал чёрные пятна.
   aoCamera = new THREE.PerspectiveCamera();
   const ao = new GTAOPass(scene, aoCamera, window.innerWidth, window.innerHeight);
-  ao.updateGtaoMaterial({ radius: 0.9, distanceExponent: 1.4, thickness: 1.2, scale: 1.1, samples: 16 });
+  ao.updateGtaoMaterial({ radius: 0.9, distanceExponent: 1.4, thickness: 1.2, scale: 1.1, samples: 12 });
   ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 8 });
   composer.addPass(ao);
   composer.addPass(new OutputPass());
@@ -1422,6 +1427,7 @@ if (!lowPower && new URLSearchParams(location.search).get('fx') !== '0') {
 
 // Рендер по требованию: пока ничего не меняется, сцена не перерисовывается (экономит батарею и нагрев).
 const maxPixelRatio = pixelRatio;
+const minPixelRatio = lowPower ? 0.85 : 1.0;
 let pixelCeiling = maxPixelRatio;
 let lastActivity = performance.now() + 8000;
 let lastRender = 0;
@@ -1429,6 +1435,7 @@ let frameTotal = 0;
 let frameCount = 0;
 let lastResolutionChange = 0;
 let pendingPixelRatio = null;
+let aoStrikes = 0;
 let lastRaise = 0;
 let noRaiseUntil = 0;
 const markDirty = () => { lastActivity = performance.now(); };
@@ -1502,10 +1509,13 @@ renderer.setAnimationLoop(() => {
       const average = frameTotal / frameCount;
       frameTotal = 0;
       frameCount = 0;
-      if (aoActive && average > 45) composer = null;
-      else if (average > 19 && pixelRatio > 0.65 && now - lastResolutionChange > 1200) {
+      if (aoActive && average > 21) {
+        // Сначала жертвуем затенением, а не чёткостью: картинка остаётся резкой.
+        aoStrikes += 1;
+        if (aoStrikes >= 2) composer = null;
+      } else if (average > 19 && pixelRatio > minPixelRatio && now - lastResolutionChange > 1200) {
         const justRaised = now - lastRaise < 4000;
-        pixelCeiling = Math.max(0.65, pixelRatio * 0.88);
+        pixelCeiling = Math.max(minPixelRatio, pixelRatio * 0.9);
         pendingPixelRatio = pixelCeiling;
         pixelRatio = pixelCeiling;
         lastResolutionChange = now;
