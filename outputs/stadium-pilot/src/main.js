@@ -1197,6 +1197,12 @@ async function tryPanorama(position, token) {
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
     panoTextures.set(node.file, texture);
+    // Панорама 3300×2300 занимает около 30 МБ видеопамяти: держим в кэше только последние две.
+    while (panoTextures.size > 2) {
+      const [oldest, oldTexture] = panoTextures.entries().next().value;
+      panoTextures.delete(oldest);
+      if (oldTexture !== texture) oldTexture.dispose();
+    }
   }
   if (token !== panoToken || view !== 'seat') return;
   const lon = THREE.MathUtils.degToRad(node.lon);
