@@ -288,6 +288,10 @@ function ring(outerWidth, outerDepth, innerWidth, innerDepth, radius, height, su
 
 // Геометрия чаши и места являются ориентировочными, а не измеренным планом.
 box(850, 0.5, 850, 0, -0.5, 0, material('#7d8873'));
+const farGround = new THREE.Mesh(new THREE.CircleGeometry(6500, 48), material('#6e7a66', 1));
+farGround.rotation.x = -Math.PI / 2;
+farGround.position.y = -0.8;
+scene.add(farGround);
 box(105, 0.12, 68, 0, 0, 0, grass);
 const mowingShade = new THREE.MeshBasicMaterial({ color: '#1c452c', transparent: true, opacity: 0.12, depthWrite: false });
 for (let strip = 0; strip < 5; strip += 1) {
