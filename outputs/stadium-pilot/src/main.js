@@ -3,6 +3,10 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import horizon from './horizon.json';
 import surroundings from './surroundings.json';
 import greenery from './greenery.json';
@@ -1277,8 +1281,24 @@ window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   updateCameraFraming();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  composer?.setSize(window.innerWidth, window.innerHeight);
 });
 setView('overview');
+// Затенение в контактах (ambient occlusion): тёмные стыки между рядами, креслами и ступенями.
+// Включается только на десктопе; ?fx=0 в адресе отключает эффект.
+const fpsWindow = { start: performance.now(), last: performance.now(), frames: 0, checks: 0 };
+let composer;
+if (!window.matchMedia('(pointer: coarse)').matches && new URLSearchParams(location.search).get('fx') !== '0') {
+  const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+  const target = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 4 });
+  composer = new EffectComposer(renderer, target);
+  composer.addPass(new RenderPass(scene, camera));
+  const ao = new GTAOPass(scene, camera, window.innerWidth, window.innerHeight);
+  ao.updateGtaoMaterial({ radius: 0.9, distanceExponent: 1.4, thickness: 1.2, scale: 1.1, samples: 16 });
+  ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 8 });
+  composer.addPass(ao);
+  composer.addPass(new OutputPass());
+}
 renderer.setAnimationLoop(() => {
   if (cameraTransition) {
     const transition = cameraTransition;
@@ -1306,7 +1326,22 @@ renderer.setAnimationLoop(() => {
     flag.rotation.z = Math.sin(clock * 3.1 + flag.userData.phase) * 0.06;
   }
   if (controls.enabled) controls.update();
-  renderer.render(scene, camera);
+  if (composer) {
+    // Если видеокарта не тянет затенение (меньше 22 кадров/с за 3 секунды), эффект отключается сам.
+    const stamp = performance.now();
+    // Пауза (вкладка была скрыта) не считается медленной работой: окно измерения начинается заново.
+    if (stamp - fpsWindow.last > 500) { fpsWindow.start = stamp; fpsWindow.frames = 0; }
+    fpsWindow.last = stamp;
+    if (stamp - fpsWindow.start > 3000) {
+      if (fpsWindow.frames > 0 && fpsWindow.frames / ((stamp - fpsWindow.start) / 1000) < 22 && fpsWindow.checks > 0) composer = null;
+      fpsWindow.start = stamp;
+      fpsWindow.frames = 0;
+      fpsWindow.checks += 1;
+    }
+    fpsWindow.frames += 1;
+  }
+  if (composer) composer.render();
+  else renderer.render(scene, camera);
 });
 
 // Переключатель времени суток: день и вечер (вечерний свет приблизительный).
