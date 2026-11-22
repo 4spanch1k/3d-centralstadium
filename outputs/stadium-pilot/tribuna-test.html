@@ -25,6 +25,7 @@
     import * as THREE from 'three';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+    import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
     import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
     const scene = new THREE.Scene();
@@ -35,12 +36,25 @@
     renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.15;
+    renderer.toneMappingExposure = 1.0;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     document.body.appendChild(renderer.domElement);
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x536765, 2.2));
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x536765, 0.9));
     const light = new THREE.DirectionalLight(0xfff2d6, 2);
     light.position.set(-20, 40, 20);
-    scene.add(light);
+    light.castShadow = true;
+    light.shadow.mapSize.set(4096, 4096);
+    Object.assign(light.shadow.camera, { left: -25, right: 25, top: 25, bottom: -25, near: 10, far: 120 });
+    light.shadow.camera.updateProjectionMatrix();
+    light.shadow.bias = -0.0004;
+    light.target.position.set(0, 3, -58);
+    scene.add(light, light.target);
+    new HDRLoader().load('/sky.hdr', (hdr) => {
+      hdr.mapping = THREE.EquirectangularReflectionMapping;
+      scene.environment = hdr;
+      scene.environmentIntensity = 0.6;
+    });
 
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(150, 120), new THREE.MeshStandardMaterial({ color: '#3a7ca2', roughness: 0.9 }));
     ground.rotation.x = -Math.PI / 2;
@@ -190,19 +204,6 @@
       lamps.position.set(x, 28, 78);
       scene.add(lamps);
     }
-    const railMaterial = new THREE.MeshStandardMaterial({ color: '#c6cfcb', metalness: 0.4, roughness: 0.5 });
-    for (let x = -16; x <= 16; x += 4) {
-      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1, 6), railMaterial);
-      post.position.set(x, 0.5, -51);
-      scene.add(post);
-    }
-    for (const height of [0.45, 0.95]) {
-      const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 32, 6), railMaterial);
-      rail.rotation.z = Math.PI / 2;
-      rail.position.set(0, height, -51);
-      scene.add(rail);
-    }
-
     const controls = new OrbitControls(camera, renderer.domElement);
     const back = document.querySelector('#back');
     const status = document.querySelector('#status');
@@ -240,13 +241,12 @@
       back.hidden = true;
     }
     showStand();
-    new GLTFLoader().load('/tribuna-tinypoly.glb', (model) => {
+    new GLTFLoader().load('/tribuna-realistic.glb', (model) => {
       model.scene.traverse((object) => {
         if (!object.isMesh) return;
-        object.geometry.computeBoundingBox();
-        const size = new THREE.Vector3();
-        object.geometry.boundingBox.getSize(size);
-        if (size.y < 1) object.material = concrete;
+        object.castShadow = object.material.name !== 'Стекло';
+        object.receiveShadow = true;
+        if (object.material.name === 'Стекло') { object.material.transparent = true; object.material.depthWrite = false; }
       });
       scene.add(model.scene);
       scene.add(targets);

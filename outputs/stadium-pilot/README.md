@@ -29,7 +29,7 @@ npm run build
 
 Текстура газона: Meshy, Sports Turf, CC0 — https://www.meshy.ai/textures/grass/sports-turf. HDR-небо: Poly Haven, Kloppenheim 05 Pure Sky, CC0 — https://polyhaven.com/a/kloppenheim_05_puresky.
 
-Восемь беговых дорожек указаны в описании стадиона: https://vlast.kz/gorod/18022-rekonstrukcia-centralnogo-stadiona-almaty-pocemu-ee-nelza-delat.html. Геометрия разметки в модели ориентировочная.
+Восемь беговых дорожек указаны в описании стадиона: https://vlast.kz/gorod/18022-rekonstrukcia-centralnogo-stadiona-almaty-pocemu-ee-nelza-delat.html. Разметка и отдельная прилегающая площадка в модели ориентировочные; цвет дорожки уточнён по фотографии 2025 года: https://tengrinews.kz/kazakhstan_news/rabochaya-gruppa-akimata-almatyi-proverila-tsentralnyiy-579996/.
 
 Центральный блок западной трибуны показан приблизительно по описанию: https://prosports.kz/news/278308-chto-mozhno-uluchshite-n-ts-ntr-lenom-v-lm-ti-b-z-boleshikh-vlozh-nii/. В сообщении за 2025 год указан 19-й ряд сектора 42: https://bes.media/news/sochuvstvuyu-esli-vashi-mesta-na-kontsert-dzhey-lo-19-ryad-1-6-mesta-zhitel-almati-5651b9/. Данные не позволяют определить все ряды и места.
 
@@ -38,6 +38,10 @@ npm run build
 На той же схеме западные сектора разделены на нижний и верхний пояса; у показанных секторов 5, 6 и 7 число рядов различается (11, 14 и 15), у сектора 14 видны ряды до 19. В модели условно предусмотрено до 15 рядов в секторах 1–9 и до 19 в секторах 10–17: границы и ряды других секторов требуют сверки. Ложи на схеме модели не воспроизведены как отдельные места.
 
 Рельеф покрытия дорожек: уменьшенная normal map Running Track от Poly Haven, CC0 — https://polyhaven.com/a/running_track.
+
+Контуры окружающих зданий и зелёных участков основаны на данных © участников OpenStreetMap, полученных 22.11.2026: https://www.openstreetmap.org/copyright (ODbL). Высоты рассчитаны по указанной в карте высоте или числу этажей; для зданий без этих данных принята условная высота. Положение относительно стадиона, высота этажей и внешний вид приблизительны.
+
+Южный горный фон построен по высотам Mapzen Terrain Tiles: https://github.com/tilezen/joerd/blob/master/docs/attribution.md. Модель создаётся в Blender скриптом `work/blender/create_terrain.py`. Для отображения вдали горизонтальные и вертикальные расстояния одинаково уменьшены; цвет и освещение приближены и не являются фотографией или точной реконструкцией вида.
 
 В модели добавлены ориентировочные ограждения перед обеими продольными трибунами; точные высоты и расстояния не измерены.
 
@@ -48,3 +52,5 @@ npm run build
 Решётчатые мачты ориентировочно воссозданы по снимку Necip Duman: https://www.pexels.com/ru-ru/photo/39854391/ (на странице указана дата съёмки 25.05.2026); положение, высота и число ламп не измерены. Фотография в проект не включена.
 
 Цветовые блоки ориентировочно уточнены по снимкам Necip Duman: восточная трибуна https://www.pexels.com/ru-ru/photo/39854589/ и южная https://www.pexels.com/ru-ru/photo/39854596/. Фотографии не включены в проект; точные цвета и распределение кресел по секторам не измерены.
+
+Навес, центральное здание западной трибуны и общие цвета её ярусов ориентировочно сверены с фотографией 2025 года: https://tengrinews.kz/kazakhstan_news/rabochaya-gruppa-akimata-almatyi-proverila-tsentralnyiy-579996/. Модели навеса и здания созданы в Blender (`work/blender/stadium-roof.blend` и `work/blender/west-building.blend`); размеры и отдельные детали не измерены. Условные места, попадающие внутрь здания, исключены из модели.

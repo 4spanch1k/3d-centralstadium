@@ -2,7 +2,10 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import horizon from './horizon.json';
+import surroundings from './surroundings.json';
+import greenery from './greenery.json';
 import './style.css';
 
 const canvas = document.querySelector('#stadium');
@@ -21,20 +24,21 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.shadowMap.autoUpdate = false;
 renderer.shadowMap.needsUpdate = true;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.15;
+renderer.toneMappingExposure = 1.05;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#a7c0c3');
 const horizonPositions = [];
 const horizonColors = [];
 const horizonFaces = [];
+const horizonScale = 6500 / 450;
 const foothills = new THREE.Color('#657d83');
 const rockyPeak = new THREE.Color('#768f98');
 const snowyPeak = new THREE.Color('#d1d9d8');
 for (let i = 0; i < horizon.length; i += 1) {
   const angle = i / horizon.length * Math.PI * 2;
-  const x = Math.cos(angle) * 450;
-  const z = Math.sin(angle) * 450;
+  const x = Math.cos(angle) * 6500;
+  const z = Math.sin(angle) * 6500;
   let slope = 0;
   let altitude = 0;
   for (let offset = -2; offset <= 2; offset += 1) {
@@ -43,10 +47,10 @@ for (let i = 0; i < horizon.length; i += 1) {
     slope += sample[0] * weight / 9;
     altitude += sample[1] * weight / 9;
   }
-  const height = 8 + slope * 450;
-  const snow = THREE.MathUtils.clamp((altitude - 2700) / 1200, 0, 1);
+  const height = (8 + slope * 450) * horizonScale;
+  const snow = THREE.MathUtils.smoothstep(altitude, 3200, 4000) * 0.3;
   const peak = rockyPeak.clone().lerp(snowyPeak, snow);
-  for (const [y, color] of [[-20, foothills], [Math.max(0, height * 0.65), rockyPeak], [height, peak]]) {
+  for (const [y, color] of [[-20 * horizonScale, foothills], [Math.max(0, height * 0.65), rockyPeak], [height, peak]]) {
     horizonPositions.push(x, y, z);
     horizonColors.push(color.r, color.g, color.b);
   }
@@ -69,7 +73,7 @@ new HDRLoader().load('/sky.hdr', (texture) => {
   scene.environment = texture;
   scene.environmentIntensity = 0.45;
 }, undefined, (error) => console.error('Не удалось загрузить небо', error));
-const camera = new THREE.PerspectiveCamera(38, window.innerWidth / window.innerHeight, 0.1, 1000);
+const camera = new THREE.PerspectiveCamera(38, window.innerWidth / window.innerHeight, 0.1, 7500);
 const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
 controls.enablePan = false;
@@ -77,8 +81,8 @@ controls.minDistance = 90;
 controls.maxDistance = 390;
 controls.maxPolarAngle = Math.PI / 2.2;
 controls.target.set(0, 4, 0);
-scene.add(new THREE.HemisphereLight('#f8f4dd', '#536765', 2.1));
-const sun = new THREE.DirectionalLight('#fff2d6', 2.7);
+scene.add(new THREE.HemisphereLight('#f4f1e2', '#4a5c5a', 0.75));
+const sun = new THREE.DirectionalLight('#fff0d0', 2.6);
 sun.position.set(-85, 140, -70);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
@@ -111,12 +115,64 @@ trackNormal.wrapS = THREE.RepeatWrapping;
 trackNormal.wrapT = THREE.RepeatWrapping;
 trackNormal.repeat.set(0.5, 0.5);
 trackNormal.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
-const track = new THREE.MeshStandardMaterial({ color: '#397da5', roughness: 0.95, normalMap: trackNormal, normalScale: new THREE.Vector2(0.5, 0.5) });
+const track = new THREE.MeshStandardMaterial({ color: '#405a70', roughness: 0.95, normalMap: trackNormal, normalScale: new THREE.Vector2(0.5, 0.5) });
 const white = material('#e8ead9');
-const yellowSeats = material('#dab13e', 0.58);
-const blueSeats = material('#3978a1', 0.58);
-const greenSeats = material('#65a48c', 0.58);
+const yellowSeats = material('#e0a617', 0.5);
+const blueSeats = material('#1f5fa8', 0.5);
+const greenSeats = material('#2f8f6a', 0.5);
 const steel = material('#d8dbd2', 0.55);
+
+const buildingRoofs = [];
+const buildingWalls = [];
+for (const [height, footprint] of surroundings) {
+  const shape = new THREE.Shape();
+  shape.moveTo(footprint[0][0], -footprint[0][1]);
+  for (const [x, z] of footprint.slice(1)) shape.lineTo(x, -z);
+  shape.closePath();
+  const geometry = new THREE.ExtrudeGeometry(shape, { depth: height, bevelEnabled: false });
+  geometry.rotateX(-Math.PI / 2);
+  for (const group of geometry.groups) {
+    const part = new THREE.BufferGeometry();
+    for (const [name, attribute] of Object.entries(geometry.attributes)) {
+      const start = group.start * attribute.itemSize;
+      const end = (group.start + group.count) * attribute.itemSize;
+      part.setAttribute(name, new THREE.BufferAttribute(attribute.array.slice(start, end), attribute.itemSize));
+    }
+    (group.materialIndex === 0 ? buildingRoofs : buildingWalls).push(part);
+  }
+  geometry.dispose();
+}
+const facadeCanvas = document.createElement('canvas');
+facadeCanvas.width = 64;
+facadeCanvas.height = 64;
+const facade = facadeCanvas.getContext('2d');
+facade.fillStyle = '#aaa9a1';
+facade.fillRect(0, 0, 64, 64);
+facade.fillStyle = '#657475';
+facade.fillRect(12, 10, 40, 38);
+facade.fillStyle = '#949f9b';
+facade.fillRect(30, 10, 4, 38);
+facade.fillRect(12, 29, 40, 3);
+const facadeTexture = new THREE.CanvasTexture(facadeCanvas);
+facadeTexture.colorSpace = THREE.SRGBColorSpace;
+facadeTexture.wrapS = THREE.RepeatWrapping;
+facadeTexture.wrapT = THREE.RepeatWrapping;
+facadeTexture.repeat.set(0.28, 0.28);
+scene.add(new THREE.Mesh(mergeGeometries(buildingRoofs), material('#969991')));
+scene.add(new THREE.Mesh(mergeGeometries(buildingWalls), new THREE.MeshStandardMaterial({ map: facadeTexture, roughness: 0.95 })));
+for (const geometry of [...buildingRoofs, ...buildingWalls]) geometry.dispose();
+const greenGeometries = greenery.map((footprint) => {
+  const shape = new THREE.Shape();
+  shape.moveTo(footprint[0][0], -footprint[0][1]);
+  for (const [x, z] of footprint.slice(1)) shape.lineTo(x, -z);
+  shape.closePath();
+  const geometry = new THREE.ShapeGeometry(shape);
+  geometry.rotateX(-Math.PI / 2);
+  geometry.translate(0, -0.15, 0);
+  return geometry;
+});
+scene.add(new THREE.Mesh(mergeGeometries(greenGeometries), material('#657b60')));
+greenGeometries.forEach((geometry) => geometry.dispose());
 
 function box(width, height, depth, x, y, z, surface) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), surface);
@@ -154,7 +210,7 @@ function ring(outerWidth, outerDepth, innerWidth, innerDepth, radius, height, su
 }
 
 // Геометрия чаши и места являются ориентировочными, а не измеренным планом.
-box(600, 0.5, 600, 0, -0.5, 0, material('#a2ae9c'));
+box(850, 0.5, 850, 0, -0.5, 0, material('#a2ae9c'));
 box(105, 0.12, 68, 0, 0, 0, grass);
 const mowingShade = new THREE.MeshBasicMaterial({ color: '#1c452c', transparent: true, opacity: 0.12, depthWrite: false });
 for (let strip = 0; strip < 5; strip += 1) {
@@ -180,7 +236,8 @@ circle.rotation.x = -Math.PI / 2;
 circle.position.y = 0.12;
 scene.add(circle);
 
-ring(70, 52, 54, 35, 29, 0.04, track);
+ring(70, 52, 54, 35, 29, 0.02, darkConcrete);
+ring(65, 46, 54, 35, 26, 0.04, track);
 for (let i = 0; i <= 8; i += 1) {
   ring(55 + i * 1.22, 36 + i * 1.22, 54.94 + i * 1.22, 35.94 + i * 1.22, 16 + i * 1.22, 0.07, white);
 }
@@ -190,6 +247,7 @@ const rows = 34;
 const seatsPerRow = 800;
 const standLevels = [];
 const aisles = Array.from({ length: 8 }, () => []);
+const aisleSteps = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 0.04, 0.68), concrete, rows * aisles.length);
 const seatShape = new THREE.Shape();
 seatShape.moveTo(-0.23, -0.2);
 seatShape.lineTo(0.23, -0.2);
@@ -217,6 +275,25 @@ seatBack.dispose();
 const yellow = new THREE.InstancedMesh(seatGeometry, yellowSeats, rows * seatsPerRow);
 const blue = new THREE.InstancedMesh(seatGeometry, blueSeats, rows * seatsPerRow);
 const green = new THREE.InstancedMesh(seatGeometry, greenSeats, rows * seatsPerRow);
+const modelLoader = new GLTFLoader();
+modelLoader.load('/alatau-terrain.glb', (model) => {
+  model.scene.traverse((object) => {
+    if (object.isMesh) object.material = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
+  });
+  scene.add(model.scene);
+}, undefined, (error) => console.error('Не удалось загрузить рельеф гор:', error));
+modelLoader.load('/stadium-seat.glb', (model) => {
+  const seat = model.scene.getObjectByName('Stadium_seat');
+  if (!seat?.isMesh) {
+    console.error('The stadium seat model does not contain a seat mesh.');
+    return;
+  }
+  yellow.geometry = seat.geometry;
+  blue.geometry = seat.geometry;
+  green.geometry = seat.geometry;
+  seatGeometry.dispose();
+  renderer.shadowMap.needsUpdate = true;
+}, undefined, (error) => console.error('Could not load the stadium seat model:', error));
 yellow.castShadow = true;
 blue.castShadow = true;
 green.castShadow = true;
@@ -224,6 +301,9 @@ const hitGeometry = new THREE.BoxGeometry(0.7, 0.75, 0.85);
 hitGeometry.translate(0, 0.22, 0);
 const seatHits = new THREE.InstancedMesh(hitGeometry, new THREE.MeshBasicMaterial(), rows * seatsPerRow);
 seatHits.visible = false;
+const supportGeometry = new THREE.BoxGeometry(0.09, 0.25, 0.12);
+supportGeometry.translate(0, -0.15, 0.08);
+const seatSupports = new THREE.InstancedMesh(supportGeometry, material('#59645e', 0.75), rows * seatsPerRow);
 const helper = new THREE.Object3D();
 const yellowData = [];
 const blueData = [];
@@ -240,9 +320,18 @@ for (let row = 0; row < rows; row += 1) {
   const path = roundedPath(71 + step, 53 + step, 29 + step);
   const points = path.getSpacedPoints(seatsPerRow);
   for (let aisle = 0; aisle < aisles.length; aisle += 1) {
-    const point = points[aisle * 100 + 1];
+    const first = points[aisle * 100];
+    const point = points[aisle * 100 + 2];
+    const end = points[aisle * 100 + 4];
     aisles[aisle].push(new THREE.Vector3(point.x, y + 0.35, -point.y));
+    const outward = new THREE.Vector2(point.x, point.y).normalize();
+    helper.position.set(point.x + outward.x * 0.24, y + 0.02, -point.y - outward.y * 0.24);
+    helper.rotation.set(0, Math.atan2(end.y - first.y, end.x - first.x), 0);
+    helper.scale.set(first.distanceTo(end) * 0.85, 1, 1);
+    helper.updateMatrix();
+    aisleSteps.setMatrixAt(row * aisles.length + aisle, helper.matrix);
   }
+  helper.scale.set(1, 1, 1);
   for (let i = 0; i < seatsPerRow; i += 1) {
     if (i % 100 < 4) continue;
     const point = points[i];
@@ -254,13 +343,15 @@ for (let row = 0; row < rows; row += 1) {
       ? (point.x > 0 ? 'north' : 'south')
       : (point.y > 0 ? 'west' : 'east');
     if (stand === 'east' && (row === 13 || row === 14)) continue;
+    if (stand === 'west' && Math.abs(point.x) < 12.5 && point.y > 72.5) continue;
     const seat = { stand, row: row + 1, position: helper.position.clone() };
     seatHits.setMatrixAt(seats.length, helper.matrix);
+    seatSupports.setMatrixAt(seats.length, helper.matrix);
     seats.push(seat);
     if ((stand === 'east' && row < 13) || (stand === 'south' && Math.floor(i / 16) % 2 === 0)) {
       green.setMatrixAt(greenCount++, helper.matrix);
       greenData.push(seat);
-    } else if ((stand === 'east' && row >= 15) || (stand !== 'east' && stand !== 'south' && Math.floor(i / 16) % 3 === 0)) {
+    } else if (((stand === 'east' || stand === 'west') && row >= 15) || (stand === 'north' && Math.floor(i / 16) % 3 === 0)) {
       blue.setMatrixAt(blueCount++, helper.matrix);
       blueData.push(seat);
     } else {
@@ -302,7 +393,7 @@ for (const seat of seats) {
     else seat.row = row + 1;
   }
 }
-for (const [mesh, data] of [[yellow, yellowData], [blue, blueData], [green, greenData], [seatHits, seats]]) {
+for (const [mesh, data] of [[yellow, yellowData], [blue, blueData], [green, greenData], [seatHits, seats], [seatSupports, seats]]) {
   data.forEach((seat, index) => {
     if (seat.hidden) mesh.setMatrixAt(index, hiddenMatrix);
   });
@@ -315,45 +406,56 @@ blue.instanceMatrix.needsUpdate = true;
 green.instanceMatrix.needsUpdate = true;
 seatHits.count = seats.length;
 seatHits.instanceMatrix.needsUpdate = true;
-scene.add(yellow, blue, green, seatHits);
-const aisleLines = [];
+seatSupports.count = seats.length;
+seatSupports.instanceMatrix.needsUpdate = true;
+aisleSteps.instanceMatrix.needsUpdate = true;
+aisleSteps.receiveShadow = true;
+scene.add(yellow, blue, green, seatHits, seatSupports, aisleSteps);
+// Поручни проходов: тонкие металлические трубки и стойки вместо линий.
+const railGeometries = [];
+const railUp = new THREE.Vector3(0, 1, 0);
+function railTube(a, b, radius) {
+  const direction = b.clone().sub(a);
+  const tube = new THREE.CylinderGeometry(radius, radius, direction.length(), 6);
+  tube.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(railUp, direction.clone().normalize()));
+  const middle = a.clone().add(b).multiplyScalar(0.5);
+  tube.translate(middle.x, middle.y, middle.z);
+  railGeometries.push(tube);
+}
 for (const aisle of aisles) {
   for (let row = 0; row < aisle.length - 1; row += 1) {
-    const start = aisle[row];
-    const end = aisle[row + 1];
-    aisleLines.push(start.x, start.y + 0.85, start.z, end.x, end.y + 0.85, end.z);
-    if (row % 4 === 0) aisleLines.push(start.x, start.y, start.z, start.x, start.y + 0.85, start.z);
+    const start = aisle[row].clone();
+    const end = aisle[row + 1].clone();
+    railTube(start.clone().setY(start.y + 0.85), end.clone().setY(end.y + 0.85), 0.025);
+    railTube(start.clone().setY(start.y + 0.45), end.clone().setY(end.y + 0.45), 0.018);
+    if (row % 3 === 0) railTube(start, start.clone().setY(start.y + 0.85), 0.02);
   }
 }
-const aisleGeometry = new THREE.BufferGeometry();
-aisleGeometry.setAttribute('position', new THREE.Float32BufferAttribute(aisleLines, 3));
-scene.add(new THREE.LineSegments(aisleGeometry, new THREE.LineBasicMaterial({ color: '#d9e0d9' })));
+const rails = new THREE.Mesh(mergeGeometries(railGeometries), new THREE.MeshStandardMaterial({ color: '#c9d1d3', metalness: 0.85, roughness: 0.3 }));
+rails.castShadow = true;
+scene.add(rails);
 
-// Пропорции навеса ориентировочные: измеренного чертежа пока нет.
-const booth = material('#b0b7b3');
-const boothGlass = new THREE.MeshStandardMaterial({ color: '#394f55', roughness: 0.25, metalness: 0.25 });
-box(24, 5.2, 4, 0, 14.2, -76, booth);
-for (const y of [13, 15.4]) {
-  for (let x = -9; x <= 9; x += 3) {
-    box(2.55, 1.7, 0.06, x, y, -73.97, boothGlass);
-  }
-}
-const roofMaterial = new THREE.MeshStandardMaterial({ color: '#8eb3bb', roughness: 0.45, metalness: 0.1, transparent: true, opacity: 0.65, depthWrite: false });
-const roof = box(104, 0.18, 20, 0, 18, -68, roofMaterial);
-roof.rotation.x = -0.04;
-const trussPoints = [];
-for (let x = -48; x <= 48; x += 12) {
-  box(0.3, 15, 0.3, x, 10, -77, steel);
-  box(0.22, 0.24, 20, x, 17.55, -68, steel);
-  for (let z = -77; z < -59; z += 3) {
-    trussPoints.push(x, 17.5, z, x, 16.3, z + 1.5, x, 16.3, z + 1.5, x, 17.5, z + 3);
-  }
-}
-for (let x = -48; x <= 48; x += 4) box(0.11, 0.15, 20, x, 17.8, -68, steel);
-for (const z of [-77, -68, -58]) box(104, 0.16, 0.16, 0, 17.65, z, steel);
-const trussGeometry = new THREE.BufferGeometry();
-trussGeometry.setAttribute('position', new THREE.Float32BufferAttribute(trussPoints, 3));
-scene.add(new THREE.LineSegments(trussGeometry, new THREE.LineBasicMaterial({ color: '#bcc9ca' })));
+// Пропорции здания и навеса ориентировочные: измеренного чертежа пока нет.
+modelLoader.load('/west-building.glb', (model) => {
+  model.scene.traverse((object) => {
+    if (object.isMesh) {
+      object.castShadow = true;
+      object.receiveShadow = true;
+    }
+  });
+  scene.add(model.scene);
+  renderer.shadowMap.needsUpdate = true;
+}, undefined, (error) => console.error('Не удалось загрузить здание трибуны:', error));
+modelLoader.load('/stadium-roof.glb', (model) => {
+  model.scene.traverse((object) => {
+    if (object.isMesh) {
+      object.castShadow = true;
+      object.receiveShadow = true;
+    }
+  });
+  scene.add(model.scene);
+  renderer.shadowMap.needsUpdate = true;
+}, undefined, (error) => console.error('Не удалось загрузить модель навеса:', error));
 const roofLights = new THREE.InstancedMesh(new THREE.BoxGeometry(0.75, 0.16, 0.25), new THREE.MeshStandardMaterial({ color: '#f5f2df', emissive: '#e5e0c7', emissiveIntensity: 0.45 }), 33);
 for (let i = 0; i < 33; i += 1) {
   helper.position.set(-48 + i * 3, 17.45, -58.3);
@@ -425,7 +527,7 @@ for (const z of [-50.5, 50.5]) {
 
 const views = {
   overview: { label: 'ОБЩИЙ ВИД', position: [180, 155, 220] },
-  west: { label: 'ЗАПАДНАЯ ТРИБУНА', position: [0, 27, 38], target: [0, 5, -70] },
+  west: { label: 'ЗАПАДНАЯ ТРИБУНА', position: [0, 12, 30], target: [0, 8, -70] },
   east: { label: 'ВОСТОЧНАЯ ТРИБУНА', position: [0, 27, -38], target: [0, 5, 70] },
   north: { label: 'СЕВЕРНАЯ ТРИБУНА', position: [-38, 27, 0], target: [82, 5, 0] },
   south: { label: 'ЮЖНАЯ ТРИБУНА', position: [38, 27, 0], target: [-82, 5, 0] },
