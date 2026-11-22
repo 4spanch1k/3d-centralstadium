@@ -1184,8 +1184,11 @@ function loadPanoNodes() {
 }
 async function tryPanorama(position, token) {
   const nodes = await loadPanoNodes();
+  const seat = selectedSeat;
+  // Узел берётся из того же сектора (ближайший по расстоянию); для узлов без привязки к сектору действует радиус.
   const node = nodes.map((item) => ({ item, distance: Math.hypot(item.position[0] - position.x, item.position[1] - position.y, item.position[2] - position.z) }))
-    .filter((entry) => entry.distance < (entry.item.radius ?? 3)).sort((a, b) => a.distance - b.distance)[0]?.item;
+    .filter((entry) => (entry.item.sector ? entry.item.stand === seat?.stand && entry.item.sector === seat?.sector : entry.distance < (entry.item.radius ?? 3)))
+    .sort((a, b) => a.distance - b.distance)[0]?.item;
   if (!node || token !== panoToken) return;
   let texture = panoTextures.get(node.file);
   if (!texture) {
@@ -1205,7 +1208,11 @@ async function tryPanorama(position, token) {
   panoSphere = new THREE.Mesh(geometry, material);
   panoSphere.position.set(position.x, position.y, position.z);
   // Центр изображения (долгота 0) смотрит в сторону поля, как камера при рендере.
-  panoSphere.rotation.y = Math.PI - lon - initialYaw + (node.yawOffset ?? 0);
+  // Картинка привязана к направлению узла на поле; взгляд по умолчанию тоже туда.
+  const nodeYaw = node.yaw ?? initialYaw;
+  panoSphere.rotation.y = Math.PI - lon - nodeYaw;
+  initialYaw = nodeYaw;
+  yaw = nodeYaw;
   panoScene.add(panoSphere);
   const halfH = Math.atan(Math.tan(THREE.MathUtils.degToRad(64 / 2)) * Math.min(camera.aspect, 2.2));
   panoYawLimit = Math.max(0.05, lon - halfH - 0.03);
@@ -1460,6 +1467,12 @@ setView('overview');
 if (location.search.includes('debug')) {
   window.__debug = { renderer, scene, camera };
   // Экспорт сцены в GLB для рендера панорам в Blender (работает только с dev-сервером).
+  // Список мест (трибуна, сектор, ряд, номер, положение камеры) для планирования сетки панорам.
+  window.__debug.exportSeats = async () => {
+    const list = seats.filter((seat) => !seat.hidden && seat.sector).map((seat) => [seat.stand, seat.sector, seat.row, seat.number, +seat.position.x.toFixed(2), +(seat.position.y + 1).toFixed(2), +seat.position.z.toFixed(2)]);
+    const response = await fetch('/__save?name=seats.json', { method: 'POST', body: JSON.stringify(list) });
+    return { seats: list.length, bytes: Number(await response.text()) };
+  };
   window.__debug.exportScene = async (name = 'stadium-scene.glb') => {
     const { GLTFExporter } = await import('three/addons/exporters/GLTFExporter.js');
     const hidden = [];

@@ -4,3 +4,4 @@ dist/
 *.zip
 .playwright-cli/
 work/exports/
+outputs/stadium-pilot/public/panoramas/*.webp

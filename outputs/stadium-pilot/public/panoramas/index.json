@@ -1,15 +1,1 @@
-[
- {
-  "id": "west-5-7-12",
-  "file": "west-5-7-12-view.jpg",
-  "position": [
-   -0.03,
-   3.94,
-   -57.32
-  ],
-  "lon": 75,
-  "latUp": 40,
-  "latDown": 40,
-  "radius": 3
- }
-]
+[{"id": "east-30-b0h0", "stand": "east", "sector": 30, "file": "east-30-b0h0.webp", "position": [-35.59, 2.83, 55.16], "yaw": -0.9978, "lon": 75, "latUp": 52, "latDown": 52}, {"id": "east-30-b0h1", "stand": "east", "sector": 30, "file": "east-30-b0h1.webp", "position": [-27.43, 2.83, 55.16], "yaw": -1.1093, "lon": 75, "latUp": 52, "latDown": 52}, {"id": "east-30-b1h0", "stand": "east", "sector": 30, "file": "east-30-b1h0.webp", "position": [-35.76, 5.42, 60.2], "yaw": -1.0348, "lon": 75, "latUp": 52, "latDown": 52}, {"id": "east-30-b1h1", "stand": "east", "sector": 30, "file": "east-30-b1h1.webp", "position": [-27.03, 5.42, 60.2], "yaw": -1.1488, "lon": 75, "latUp": 52, "latDown": 52}]
