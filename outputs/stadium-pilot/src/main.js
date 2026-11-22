@@ -405,6 +405,43 @@ for (let i = 0; i <= 8; i += 1) {
   ring(55 + i * 1.22, 36 + i * 1.22, 54.94 + i * 1.22, 35.94 + i * 1.22, 16 + i * 1.22, 0.07, white);
 }
 ring(94, 76, 69, 51, 38, 0.02, darkConcrete);
+// Номера дорожек и финишная линия на западной прямой (расположение ориентировочное).
+for (let lane = 0; lane < 8; lane += 1) {
+  const numberCanvas = document.createElement('canvas');
+  numberCanvas.width = 128;
+  numberCanvas.height = 128;
+  const numberContext = numberCanvas.getContext('2d');
+  numberContext.fillStyle = '#f4f1e2';
+  numberContext.font = '700 100px system-ui, sans-serif';
+  numberContext.textAlign = 'center';
+  numberContext.textBaseline = 'middle';
+  numberContext.fillText(String(lane + 1), 64, 70);
+  const numberTexture = new THREE.CanvasTexture(numberCanvas);
+  numberTexture.colorSpace = THREE.SRGBColorSpace;
+  const mark = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.9), new THREE.MeshBasicMaterial({ map: numberTexture, transparent: true, depthWrite: false }));
+  mark.rotation.x = -Math.PI / 2;
+  mark.rotation.z = Math.PI / 2;
+  mark.position.set(-28, 0.095, -(36.61 + lane * 1.22));
+  scene.add(mark);
+}
+const finishCanvas = document.createElement('canvas');
+finishCanvas.width = 16;
+finishCanvas.height = 128;
+const finishContext = finishCanvas.getContext('2d');
+for (let i = 0; i < 16; i += 1) {
+  finishContext.fillStyle = i % 2 ? '#f4f1e2' : '#14181a';
+  finishContext.fillRect(0, i * 8, 8, 8);
+  finishContext.fillStyle = i % 2 ? '#14181a' : '#f4f1e2';
+  finishContext.fillRect(8, i * 8, 8, 8);
+}
+const finishTexture = new THREE.CanvasTexture(finishCanvas);
+finishTexture.colorSpace = THREE.SRGBColorSpace;
+finishTexture.magFilter = THREE.NearestFilter;
+const finish = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 9.76), new THREE.MeshBasicMaterial({ map: finishTexture }));
+finish.rotation.x = -Math.PI / 2;
+finish.position.set(30, 0.095, -40.9);
+scene.add(finish);
+
 
 // Барьер перед первым рядом: бетонный парапет и тонкая светодиодная лента (размеры ориентировочные).
 ring(70.7, 52.7, 70.4, 52.4, 29.3, 0.95, darkConcrete, 0.95);
