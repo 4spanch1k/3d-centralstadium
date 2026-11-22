@@ -336,6 +336,7 @@ centerSpot.position.y = 0.125;
 scene.add(centerSpot);
 
 
+const cornerFlags = [];
 // Ворота, угловые флажки и рекламные борта (размеры стандартные, раскраска условная).
 for (const side of [-1, 1]) {
   const x = side * 52.5;
@@ -362,6 +363,8 @@ for (const side of [-1, 1]) {
     scene.add(flagPole);
     const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.35, 0.3), new THREE.MeshBasicMaterial({ color: '#e0a617', side: THREE.DoubleSide }));
     flag.position.set(x - side * 0.18, 1.45, z);
+    flag.userData.phase = cornerFlags.length * 1.7;
+    cornerFlags.push(flag);
     scene.add(flag);
   }
 }
@@ -1064,6 +1067,11 @@ renderer.setAnimationLoop(() => {
       controls.enabled = transition.orbit;
       cameraTransition = null;
     }
+  }
+  const clock = performance.now() / 1000;
+  for (const flag of cornerFlags) {
+    flag.rotation.y = Math.sin(clock * 2.2 + flag.userData.phase) * 0.35;
+    flag.rotation.z = Math.sin(clock * 3.1 + flag.userData.phase) * 0.06;
   }
   if (controls.enabled) controls.update();
   renderer.render(scene, camera);
