@@ -711,6 +711,25 @@ seatSupports.instanceMatrix.needsUpdate = true;
 aisleSteps.instanceMatrix.needsUpdate = true;
 aisleSteps.receiveShadow = true;
 scene.add(yellow, blue, green, seatHits, seatSupports, aisleSteps);
+// Выходы на верхней кромке чаши в конце каждого прохода (положение и размеры ориентировочные).
+{
+  const darkOpening = new THREE.MeshStandardMaterial({ color: '#0d1112', roughness: 1 });
+  for (const aisle of aisles) {
+    const top = aisle[aisle.length - 1];
+    const outward = new THREE.Vector3(top.x, 0, top.z).normalize();
+    const base = new THREE.Vector3(top.x + outward.x * 1.5, top.y - 0.3, top.z + outward.z * 1.5);
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(3.4, 3.4, 0.9), darkConcrete);
+    const opening = new THREE.Mesh(new THREE.BoxGeometry(2.4, 2.6, 0.95), darkOpening);
+    for (const mesh of [frame, opening]) {
+      mesh.position.set(base.x, base.y + 1.7, base.z);
+      mesh.lookAt(0, mesh.position.y, 0);
+      mesh.castShadow = mesh === frame;
+      mesh.receiveShadow = true;
+      scene.add(mesh);
+    }
+    opening.position.y = base.y + 1.4;
+  }
+}
 // Поручни проходов: тонкие металлические трубки и стойки вместо линий.
 const railGeometries = [];
 const railUp = new THREE.Vector3(0, 1, 0);
