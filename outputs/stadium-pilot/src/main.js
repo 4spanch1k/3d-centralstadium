@@ -1168,6 +1168,55 @@ function showSector() {
   position.y = center.y + Math.min(radius * 0.4, 14);
   moveCamera(position, center, fov, false);
 }
+// Предрендеренные панорамы для вида с места (Blender Cycles). Если для кресла есть ближайший узел, показывается он: фотореалистично и дёшево для телефона.
+const panoScene = new THREE.Scene();
+let panoMode = false;
+let panoYawLimit = 0.6;
+let panoPitchLimit = 0.35;
+let panoNodes = null;
+const panoTextures = new Map();
+let panoSphere;
+function loadPanoNodes() {
+  if (!panoNodes) {
+    panoNodes = fetch('/panoramas/index.json').then((response) => (response.ok ? response.json() : [])).catch(() => []);
+  }
+  return panoNodes;
+}
+async function tryPanorama(position, token) {
+  const nodes = await loadPanoNodes();
+  const node = nodes.map((item) => ({ item, distance: Math.hypot(item.position[0] - position.x, item.position[1] - position.y, item.position[2] - position.z) }))
+    .filter((entry) => entry.distance < (entry.item.radius ?? 3)).sort((a, b) => a.distance - b.distance)[0]?.item;
+  if (!node || token !== panoToken) return;
+  let texture = panoTextures.get(node.file);
+  if (!texture) {
+    texture = await new THREE.TextureLoader().loadAsync(`/panoramas/${node.file}`).catch(() => null);
+    if (!texture) return;
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
+    panoTextures.set(node.file, texture);
+  }
+  if (token !== panoToken || view !== 'seat') return;
+  const lon = THREE.MathUtils.degToRad(node.lon);
+  const up = THREE.MathUtils.degToRad(node.latUp);
+  const down = THREE.MathUtils.degToRad(node.latDown);
+  if (panoSphere) { panoScene.remove(panoSphere); panoSphere.geometry.dispose(); panoSphere.material.dispose(); }
+  const geometry = new THREE.SphereGeometry(100, 96, 48, 0, lon * 2, Math.PI / 2 - up, up + down);
+  const material = new THREE.MeshBasicMaterial({ map: texture, side: THREE.BackSide, toneMapped: false });
+  panoSphere = new THREE.Mesh(geometry, material);
+  panoSphere.position.set(position.x, position.y, position.z);
+  // Центр изображения (долгота 0) смотрит в сторону поля, как камера при рендере.
+  panoSphere.rotation.y = Math.PI - lon - initialYaw + (node.yawOffset ?? 0);
+  panoScene.add(panoSphere);
+  const halfH = Math.atan(Math.tan(THREE.MathUtils.degToRad(64 / 2)) * Math.min(camera.aspect, 2.2));
+  panoYawLimit = Math.max(0.05, lon - halfH - 0.03);
+  panoPitchLimit = Math.max(0.03, Math.min(up, down) - THREE.MathUtils.degToRad(64 / 2) - 0.02);
+  panoMode = true;
+  yaw = THREE.MathUtils.clamp(yaw, initialYaw - panoYawLimit, initialYaw + panoYawLimit);
+  pitch = THREE.MathUtils.clamp(pitch, -panoPitchLimit, panoPitchLimit);
+  lookFromSeat();
+  markDirty();
+}
+let panoToken = 0;
 function showSeat() {
   if (!selectedSeat) return;
   view = 'seat';
@@ -1176,9 +1225,12 @@ function showSeat() {
   updateSeatHighlights();
   const position = selectedSeat.position.clone().add(new THREE.Vector3(0, 1, 0));
   applyDetail('near', position);
+  panoMode = false;
+  panoToken += 1;
   yaw = Math.atan2(-position.z, -position.x);
   initialYaw = yaw;
   pitch = -0.12;
+  tryPanorama(position, panoToken);
   const direction = new THREE.Vector3(Math.cos(pitch) * Math.cos(yaw), Math.sin(pitch), Math.cos(pitch) * Math.sin(yaw));
   moveCamera(position, position.clone().add(direction), 64, false);
   updateCameraFraming();
@@ -1280,8 +1332,10 @@ canvas.addEventListener('pointerdown', (event) => {
 canvas.addEventListener('pointermove', (event) => {
   if (!dragging || view !== 'seat') return;
   yaw -= (event.clientX - lastX) * 0.004;
-  yaw = THREE.MathUtils.clamp(yaw, initialYaw - 0.6, initialYaw + 0.6);
-  pitch = THREE.MathUtils.clamp(pitch + (event.clientY - lastY) * 0.004, -0.35, 0.35);
+  const yawLimit = panoMode ? panoYawLimit : 0.6;
+  const pitchLimit = panoMode ? panoPitchLimit : 0.35;
+  yaw = THREE.MathUtils.clamp(yaw, initialYaw - yawLimit, initialYaw + yawLimit);
+  pitch = THREE.MathUtils.clamp(pitch + (event.clientY - lastY) * 0.004, -pitchLimit, pitchLimit);
   lastX = event.clientX;
   lastY = event.clientY;
   lookFromSeat();
@@ -1403,7 +1457,22 @@ mergeStatic();
 setView('overview');
 // Затенение в контактах (ambient occlusion): тёмные стыки между рядами, креслами и ступенями.
 // Включается только на десктопе; ?fx=0 в адресе отключает эффект.
-if (location.search.includes('debug')) window.__debug = { renderer, scene, camera };
+if (location.search.includes('debug')) {
+  window.__debug = { renderer, scene, camera };
+  // Экспорт сцены в GLB для рендера панорам в Blender (работает только с dev-сервером).
+  window.__debug.exportScene = async (name = 'stadium-scene.glb') => {
+    const { GLTFExporter } = await import('three/addons/exporters/GLTFExporter.js');
+    const hidden = [];
+    scene.traverse((object) => {
+      if (object.isPoints || object === seatMarker || object.parent === null) return;
+      if (object.isMesh && (object === sectorHits || object === seatHits)) { hidden.push([object, object.visible]); object.visible = false; }
+    });
+    const result = await new GLTFExporter().parseAsync(scene, { binary: true, onlyVisible: true, maxTextureSize: 1024 });
+    hidden.forEach(([object, visible]) => { object.visible = visible; });
+    const response = await fetch(`/__save?name=${name}`, { method: 'POST', body: result });
+    return Number(await response.text());
+  };
+}
 // Эффект затенения в контактах: только на компьютерах и только в близких видах (сектор, место); ?fx=0 отключает.
 let composer;
 let aoCamera;
@@ -1507,8 +1576,10 @@ renderer.setAnimationLoop(() => {
     }
   }
   if (controls.enabled) controls.update();
-  const aoActive = composer && (stage === 'sector' || stage === 'confirm' || view === 'seat');
-  if (aoActive) {
+  const showingPano = panoMode && view === 'seat';
+  const aoActive = composer && !showingPano && (stage === 'sector' || stage === 'confirm' || view === 'seat');
+  if (showingPano) renderer.render(panoScene, camera);
+  else if (aoActive) {
     aoCamera.copy(camera, false);
     aoCamera.layers.set(0);
     composer.render();

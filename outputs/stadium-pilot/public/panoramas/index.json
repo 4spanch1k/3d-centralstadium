@@ -1,0 +1,15 @@
+[
+ {
+  "id": "west-5-7-12",
+  "file": "west-5-7-12-view.jpg",
+  "position": [
+   -0.03,
+   3.94,
+   -57.32
+  ],
+  "lon": 75,
+  "latUp": 40,
+  "latDown": 40,
+  "radius": 3
+ }
+]
