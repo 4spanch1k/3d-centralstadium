@@ -197,6 +197,59 @@ const greenGeometries = greenery.map((footprint) => {
 });
 scene.add(new THREE.Mesh(mergeGeometries(greenGeometries), material('#4d6a45')));
 greenGeometries.forEach((geometry) => geometry.dispose());
+// Деревья на зелёных участках: случайная, но воспроизводимая расстановка (породы и высоты условные).
+{
+  let seed = 7;
+  const random = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  const inside = (x, z, polygon) => {
+    let result = false;
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+      const [xi, zi] = polygon[i];
+      const [xj, zj] = polygon[j];
+      if ((zi > z) !== (zj > z) && x < (xj - xi) * (z - zi) / (zj - zi) + xi) result = !result;
+    }
+    return result;
+  };
+  const treePoints = [];
+  for (const polygon of greenery) {
+    const xs = polygon.map((point) => point[0]);
+    const zs = polygon.map((point) => point[1]);
+    const [minX, maxX, minZ, maxZ] = [Math.min(...xs), Math.max(...xs), Math.min(...zs), Math.max(...zs)];
+    const attempts = Math.min(400, Math.ceil((maxX - minX) * (maxZ - minZ) / 220));
+    for (let i = 0; i < attempts; i += 1) {
+      const x = minX + random() * (maxX - minX);
+      const z = minZ + random() * (maxZ - minZ);
+      if (Math.abs(x) < 125 && Math.abs(z) < 105) continue;
+      if (inside(x, z, polygon)) treePoints.push([x, z]);
+    }
+  }
+  const crownGeometry = new THREE.IcosahedronGeometry(1, 1);
+  crownGeometry.translate(0, 1, 0);
+  const trunkGeometry = new THREE.CylinderGeometry(0.12, 0.18, 1, 5);
+  trunkGeometry.translate(0, 0.5, 0);
+  const crowns = new THREE.InstancedMesh(crownGeometry, new THREE.MeshStandardMaterial({ roughness: 1, flatShading: true }), treePoints.length);
+  const trunks = new THREE.InstancedMesh(trunkGeometry, material('#5a4a3a', 1), treePoints.length);
+  const dummy = new THREE.Object3D();
+  const tint = new THREE.Color();
+  treePoints.forEach(([x, z], index) => {
+    const height = 6 + random() * 7;
+    const crown = 2.2 + random() * 1.8;
+    dummy.position.set(x, -0.15, z);
+    dummy.rotation.set(0, random() * 6.28, 0);
+    dummy.scale.set(0.5, height * 0.45, 0.5);
+    dummy.updateMatrix();
+    trunks.setMatrixAt(index, dummy.matrix);
+    dummy.position.y = height * 0.35;
+    dummy.scale.set(crown, crown * 1.25, crown);
+    dummy.updateMatrix();
+    crowns.setMatrixAt(index, dummy.matrix);
+    crowns.setColorAt(index, tint.setHSL(0.24 + random() * 0.07, 0.38, 0.2 + random() * 0.1));
+  });
+  crowns.castShadow = true;
+  trunks.castShadow = true;
+  scene.add(crowns, trunks);
+}
+
 
 function box(width, height, depth, x, y, z, surface) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), surface);
