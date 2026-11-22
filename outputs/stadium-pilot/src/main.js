@@ -3,10 +3,6 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import horizon from './horizon.json';
 import surroundings from './surroundings.json';
 import greenery from './greenery.json';
@@ -109,14 +105,14 @@ sun.shadow.bias = -0.0002;
 scene.add(sun);
 
 const material = (color, roughness = 0.9) => new THREE.MeshStandardMaterial({ color, roughness });
-const grassTexture = new THREE.TextureLoader().load('/sports-turf.jpg', undefined, undefined, (error) => console.error('Не удалось загрузить текстуру газона', error));
+const grassTexture = new THREE.TextureLoader().load('/sports-turf.webp', undefined, undefined, (error) => console.error('Не удалось загрузить текстуру газона', error));
 grassTexture.colorSpace = THREE.SRGBColorSpace;
 grassTexture.wrapS = THREE.RepeatWrapping;
 grassTexture.wrapT = THREE.RepeatWrapping;
 grassTexture.repeat.set(25, 16);
 grassTexture.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
 const grass = new THREE.MeshStandardMaterial({ map: grassTexture, roughness: 1 });
-const concreteTexture = new THREE.TextureLoader().load('/rough-concrete.jpg', undefined, undefined, (error) => console.error('Не удалось загрузить текстуру', error));
+const concreteTexture = new THREE.TextureLoader().load('/rough-concrete.webp', undefined, undefined, (error) => console.error('Не удалось загрузить текстуру', error));
 concreteTexture.colorSpace = THREE.SRGBColorSpace;
 concreteTexture.wrapS = THREE.RepeatWrapping;
 concreteTexture.wrapT = THREE.RepeatWrapping;
@@ -1412,17 +1408,28 @@ if (location.search.includes('debug')) window.__debug = { renderer, scene, camer
 let composer;
 let aoCamera;
 if (!lowPower && new URLSearchParams(location.search).get('fx') !== '0') {
-  const size = renderer.getDrawingBufferSize(new THREE.Vector2());
-  const target = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 4 });
-  composer = new EffectComposer(renderer, target);
-  composer.addPass(new RenderPass(scene, camera));
-  // Далёкий рельеф (слой 1) не участвует в расчёте затенения: на огромной дальности он давал чёрные пятна.
-  aoCamera = new THREE.PerspectiveCamera();
-  const ao = new GTAOPass(scene, aoCamera, window.innerWidth, window.innerHeight);
-  ao.updateGtaoMaterial({ radius: 0.9, distanceExponent: 1.4, thickness: 1.2, scale: 1.1, samples: 12 });
-  ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 8 });
-  composer.addPass(ao);
-  composer.addPass(new OutputPass());
+  // Модули постобработки подгружаются отдельно и только на компьютерах: телефонам они не нужны.
+  Promise.all([
+    import('three/addons/postprocessing/EffectComposer.js'),
+    import('three/addons/postprocessing/RenderPass.js'),
+    import('three/addons/postprocessing/GTAOPass.js'),
+    import('three/addons/postprocessing/OutputPass.js'),
+  ]).then(([{ EffectComposer }, { RenderPass }, { GTAOPass }, { OutputPass }]) => {
+    const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+    const target = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 4 });
+    const instance = new EffectComposer(renderer, target);
+    instance.addPass(new RenderPass(scene, camera));
+    // Далёкий рельеф (слой 1) не участвует в расчёте затенения: на огромной дальности он давал чёрные пятна.
+    aoCamera = new THREE.PerspectiveCamera();
+    const ao = new GTAOPass(scene, aoCamera, window.innerWidth, window.innerHeight);
+    ao.updateGtaoMaterial({ radius: 0.9, distanceExponent: 1.4, thickness: 1.2, scale: 1.1, samples: 12 });
+    ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 8 });
+    instance.addPass(ao);
+    instance.addPass(new OutputPass());
+    instance.setPixelRatio(pixelRatio);
+    instance.setSize(window.innerWidth, window.innerHeight);
+    composer = instance;
+  }).catch((error) => console.warn('Затенение недоступно:', error));
 }
 
 // Рендер по требованию: пока ничего не меняется, сцена не перерисовывается (экономит батарею и нагрев).
