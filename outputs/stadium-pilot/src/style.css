@@ -137,3 +137,6 @@ button { cursor: pointer; }
 
 .seat-tip { position: fixed; z-index: 4; padding: 7px 12px; border-radius: 999px; background: var(--accent-dark); color: #fff; font-size: 13px; pointer-events: none; white-space: nowrap; }
 .seat-tip[hidden] { display: none; }
+
+.loading { position: absolute; z-index: 4; top: 76px; left: 50%; transform: translateX(-50%); margin: 0; padding: 8px 16px; border-radius: 999px; background: var(--paper); box-shadow: var(--shadow); font-size: 13px; color: var(--muted); pointer-events: none; }
+.loading[hidden] { display: none; }

@@ -8,6 +8,7 @@ import surroundings from './surroundings.json';
 import greenery from './greenery.json';
 import './style.css';
 
+const initialHash = location.hash;
 const canvas = document.querySelector('#stadium');
 let renderer;
 try {
@@ -1016,6 +1017,7 @@ function setView(name) {
     button.setAttribute('aria-pressed', String(active));
   });
   if (bookingOpen) renderStage();
+  updateHash();
 }
 const standSelect = document.querySelector('#stand-select');
 const sectorSelect = document.querySelector('#sector-select');
@@ -1159,6 +1161,7 @@ function selectSector(sector) {
   applyDetail('sector');
   showSector();
   renderStage();
+  preloadPanoramas(standSelect.value, Number(sectorSelect.value));
 }
 function showSector() {
   const group = seats.filter((seat) => !seat.hidden && seat.stand === standSelect.value && seat.sector === Number(sectorSelect.value));
@@ -1197,20 +1200,8 @@ async function tryPanorama(position, token) {
     .filter((entry) => (entry.item.sector ? entry.item.stand === seat?.stand && entry.item.sector === seat?.sector : entry.distance < (entry.item.radius ?? 3)))
     .sort((a, b) => a.distance - b.distance)[0]?.item;
   if (!node || token !== panoToken) return;
-  let texture = panoTextures.get(node.file);
-  if (!texture) {
-    texture = await new THREE.TextureLoader().loadAsync(`/panoramas/${node.file}`).catch(() => null);
-    if (!texture) return;
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
-    panoTextures.set(node.file, texture);
-    // Панорама 3300×2300 занимает около 30 МБ видеопамяти: держим в кэше только последние две.
-    while (panoTextures.size > 2) {
-      const [oldest, oldTexture] = panoTextures.entries().next().value;
-      panoTextures.delete(oldest);
-      if (oldTexture !== texture) oldTexture.dispose();
-    }
-  }
+  const texture = await getPanoTexture(node.file);
+  if (!texture) return;
   if (token !== panoToken || view !== 'seat') return;
   const lon = THREE.MathUtils.degToRad(node.lon);
   const up = THREE.MathUtils.degToRad(node.latUp);
@@ -1237,6 +1228,29 @@ async function tryPanorama(position, token) {
   markDirty();
 }
 let panoToken = 0;
+const panoCacheLimit = lowPower ? 2 : 4;
+// Загружает и сразу выгружает на видеокарту панораму; в кэше держим ограниченное число (память).
+async function getPanoTexture(file) {
+  let texture = panoTextures.get(file);
+  if (texture) return texture;
+  texture = await new THREE.TextureLoader().loadAsync(`/panoramas/${file}`).catch(() => null);
+  if (!texture) return null;
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
+  renderer.initTexture(texture);
+  panoTextures.set(file, texture);
+  while (panoTextures.size > panoCacheLimit) {
+    const [oldest, oldTexture] = panoTextures.entries().next().value;
+    panoTextures.delete(oldest);
+    if (oldTexture !== texture) oldTexture.dispose();
+  }
+  return texture;
+}
+// Предзагрузка панорам выбранного сектора, чтобы «Да, посмотреть с места» открывало картинку мгновенно.
+async function preloadPanoramas(stand, sector) {
+  const nodes = (await loadPanoNodes()).filter((node) => node.stand === stand && node.sector === sector).slice(0, panoCacheLimit);
+  for (const node of nodes) await getPanoTexture(node.file);
+}
 function showSeat() {
   if (!selectedSeat) return;
   view = 'seat';
@@ -1257,6 +1271,7 @@ function showSeat() {
   document.querySelector('#preview-place').textContent = currentPlace();
   showBookingStep('preview');
   renderStage();
+  updateHash();
 }
 function showBookingStep(step) {
   document.querySelector('#seat-form').hidden = step !== 'seat';
@@ -1560,8 +1575,14 @@ for (const name of ['pointerdown', 'pointermove', 'pointerup', 'wheel', 'keydown
   window.addEventListener(name, markDirty, { passive: true, capture: true });
 }
 controls.addEventListener('change', markDirty);
-THREE.DefaultLoadingManager.onProgress = markDirty;
-THREE.DefaultLoadingManager.onLoad = markDirty;
+THREE.DefaultLoadingManager.onProgress = (url, loaded, total) => {
+  if (loadingNote && total) loadingNote.textContent = `Загрузка модели… ${Math.round(loaded / total * 100)}%`;
+  markDirty();
+};
+const loadingNote = document.querySelector('#loading');
+const hideLoading = () => { if (loadingNote) loadingNote.hidden = true; markDirty(); };
+THREE.DefaultLoadingManager.onLoad = hideLoading;
+setTimeout(hideLoading, 20000);
 function applyPixelRatio(value) {
   pixelRatio = value;
   renderer.setPixelRatio(value);
@@ -1711,3 +1732,30 @@ renderer.setAnimationLoop(() => {
   });
   document.body.appendChild(toggle);
 }
+
+// Ссылка на место: #трибуна/сектор/ряд/место (например #west/5/7/12). Открывается сразу в виде с места.
+const hashParts = () => initialHash.replace('#', '').split('/');
+function updateHash() {
+  if (view === 'seat' && selectedSeat) history.replaceState(null, '', `${location.pathname}${location.search}#${selectedSeat.stand}/${selectedSeat.sector}/${selectedSeat.row}/${selectedSeat.number}`);
+  else if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+}
+function openFromHash() {
+  const [stand, sector, row, number] = hashParts();
+  if (!standNames[stand]) return;
+  const seat = seats.find((item) => !item.hidden && item.stand === stand && item.sector === Number(sector) && item.row === Number(row) && item.number === Number(number));
+  if (!seat) return;
+  openBooking(stand);
+  selectSector(seat.sector);
+  chooseSeat(seat);
+  showSeat();
+}
+openFromHash();
+window.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape' || !bookingOpen) return;
+  if (view === 'seat') document.querySelector('#preview-back').click();
+  else if (stage === 'confirm') document.querySelector('#seat-change').click();
+  else if (stage === 'sector') document.querySelector('#stand-view').click();
+  else document.querySelector('#close-booking').click();
+  updateHash();
+});
+document.querySelector('#close-booking').addEventListener('click', updateHash);
