@@ -243,6 +243,11 @@ for (let i = 0; i <= 8; i += 1) {
 }
 ring(94, 76, 69, 51, 38, 0.02, darkConcrete);
 
+// Барьер перед первым рядом: бетонный парапет и тонкая светодиодная лента (размеры ориентировочные).
+ring(70.7, 52.7, 70.4, 52.4, 29.3, 0.95, darkConcrete, 0.95);
+ring(70.4, 52.4, 70.38, 52.38, 29.0, 0.4, new THREE.MeshBasicMaterial({ color: '#4c9bff' }), 0.07);
+ring(70.72, 52.72, 70.4, 52.4, 29.32, 1.0, steel, 0.05);
+
 const rows = 34;
 const seatsPerRow = 800;
 const standLevels = [];
