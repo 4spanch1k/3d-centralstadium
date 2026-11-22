@@ -302,6 +302,24 @@ for (let strip = 0; strip < 5; strip += 1) {
   stripe.position.set(-47.25 + strip * 21, 0.071, 0);
   scene.add(stripe);
 }
+// Потёртости газона у ворот и в центре: мягкие тёмные пятна.
+const wearCanvas = document.createElement('canvas');
+wearCanvas.width = 128;
+wearCanvas.height = 128;
+const wearContext = wearCanvas.getContext('2d');
+const wearGradient = wearContext.createRadialGradient(64, 64, 4, 64, 64, 62);
+wearGradient.addColorStop(0, 'rgba(92,78,48,0.55)');
+wearGradient.addColorStop(0.6, 'rgba(92,78,48,0.25)');
+wearGradient.addColorStop(1, 'rgba(92,78,48,0)');
+wearContext.fillStyle = wearGradient;
+wearContext.fillRect(0, 0, 128, 128);
+const wearMaterial = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(wearCanvas), transparent: true, depthWrite: false });
+for (const [x, z, width, depth] of [[-49, 0, 12, 20], [49, 0, 12, 20], [0, 0, 14, 14], [-30, 18, 10, 8], [28, -16, 10, 8]]) {
+  const patch = new THREE.Mesh(new THREE.PlaneGeometry(width, depth), wearMaterial);
+  patch.rotation.x = -Math.PI / 2;
+  patch.position.set(x, 0.074, z);
+  scene.add(patch);
+}
 function line(x1, z1, x2, z2, width = 0.18) {
   const length = Math.hypot(x2 - x1, z2 - z1);
   const mesh = box(length, 0.025, width, (x1 + x2) / 2, 0.11, (z1 + z2) / 2, white);
