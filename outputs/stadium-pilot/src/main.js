@@ -236,6 +236,60 @@ circle.rotation.x = -Math.PI / 2;
 circle.position.y = 0.12;
 scene.add(circle);
 
+// Ворота, угловые флажки и рекламные борта (размеры стандартные, раскраска условная).
+for (const side of [-1, 1]) {
+  const x = side * 52.5;
+  for (const z of [-3.66, 3.66]) {
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.44, 8), white);
+    post.position.set(x, 1.22, z);
+    post.castShadow = true;
+    scene.add(post);
+  }
+  const crossbar = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 7.32, 8), white);
+  crossbar.rotation.x = Math.PI / 2;
+  crossbar.position.set(x, 2.44, 0);
+  crossbar.castShadow = true;
+  scene.add(crossbar);
+  const netLines = [];
+  for (let z = -3.6; z <= 3.61; z += 0.6) netLines.push(x, 2.44, z, x + side * 2, 0.1, z);
+  for (let y = 0.5; y <= 2.4; y += 0.45) netLines.push(x + side * (2 - y / 2.44 * 2), y, -3.66, x + side * (2 - y / 2.44 * 2), y, 3.66);
+  const netGeometry = new THREE.BufferGeometry();
+  netGeometry.setAttribute('position', new THREE.Float32BufferAttribute(netLines, 3));
+  scene.add(new THREE.LineSegments(netGeometry, new THREE.LineBasicMaterial({ color: '#e4ebe5', transparent: true, opacity: 0.7 })));
+  for (const z of [-34, 34]) {
+    const flagPole = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1.6, 6), white);
+    flagPole.position.set(x, 0.8, z);
+    scene.add(flagPole);
+    const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.35, 0.3), new THREE.MeshBasicMaterial({ color: '#e0a617', side: THREE.DoubleSide }));
+    flag.position.set(x - side * 0.18, 1.45, z);
+    scene.add(flag);
+  }
+}
+const boardCanvas = document.createElement('canvas');
+boardCanvas.width = 1024;
+boardCanvas.height = 64;
+const boardContext = boardCanvas.getContext('2d');
+['#1f5fa8', '#f1f1ea', '#c9362f', '#e0a617', '#1d2a33', '#2f8f6a'].forEach((color, index) => {
+  boardContext.fillStyle = color;
+  boardContext.fillRect(index * 170.67, 0, 171, 64);
+  boardContext.fillStyle = color === '#f1f1ea' ? '#1d2a33' : '#f1f1ea';
+  boardContext.fillRect(index * 170.67 + 30, 28, 110, 8);
+});
+const boardTexture = new THREE.CanvasTexture(boardCanvas);
+boardTexture.colorSpace = THREE.SRGBColorSpace;
+boardTexture.wrapS = THREE.RepeatWrapping;
+const boardMaterial = new THREE.MeshStandardMaterial({ map: boardTexture, roughness: 0.55, emissive: '#ffffff', emissiveMap: boardTexture, emissiveIntensity: 0.35 });
+for (const [length, x, z, turn] of [[105, 0, -35.6, 0], [105, 0, 35.6, 0], [71, -54.4, 0, Math.PI / 2], [71, 54.4, 0, Math.PI / 2]]) {
+  const texture = boardTexture.clone();
+  texture.repeat.set(length / 17.5, 1);
+  texture.needsUpdate = true;
+  const board = new THREE.Mesh(new THREE.BoxGeometry(length, 0.9, 0.12), new THREE.MeshStandardMaterial({ map: texture, roughness: 0.55, emissive: '#ffffff', emissiveMap: texture, emissiveIntensity: 0.35 }));
+  board.position.set(x, 0.45, z);
+  board.rotation.y = turn;
+  board.castShadow = true;
+  scene.add(board);
+}
+
 ring(70, 52, 54, 35, 29, 0.02, darkConcrete);
 ring(65, 46, 54, 35, 26, 0.04, track);
 for (let i = 0; i <= 8; i += 1) {
