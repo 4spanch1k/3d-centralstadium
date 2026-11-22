@@ -1804,3 +1804,34 @@ document.querySelector('#close-booking').addEventListener('click', updateHash);
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
 }
+
+// Соседние места: в виде с места стрелки (и кнопки) переходят к креслу слева/справа и на ряд выше/ниже, чтобы сравнить виды.
+function neighborSeat(dRow, dNumber) {
+  if (!selectedSeat) return null;
+  const here = selectedSeat;
+  const inSector = seats.filter((seat) => !seat.hidden && seat.stand === here.stand && seat.sector === here.sector);
+  const wantedRow = here.row + dRow;
+  const sameRow = inSector.filter((seat) => seat.row === wantedRow);
+  if (!sameRow.length) return null;
+  if (dRow === 0) return sameRow.filter((seat) => (dNumber > 0 ? seat.number > here.number : seat.number < here.number))
+    .sort((a, b) => (dNumber > 0 ? a.number - b.number : b.number - a.number))[0] || null;
+  // На другой ряд: место с ближайшим положением вдоль ряда.
+  return sameRow.sort((a, b) => a.position.distanceToSquared(here.position) - b.position.distanceToSquared(here.position))[0];
+}
+function goToNeighbor(dRow, dNumber) {
+  if (view !== 'seat') return;
+  const seat = neighborSeat(dRow, dNumber);
+  if (!seat) return;
+  chooseSeat(seat);
+  showSeat();
+}
+window.addEventListener('keydown', (event) => {
+  if (view !== 'seat' || !bookingOpen || event.target.closest?.('select, input')) return;
+  const moves = { ArrowLeft: [0, -1], ArrowRight: [0, 1], ArrowUp: [1, 0], ArrowDown: [-1, 0] };
+  if (!moves[event.key]) return;
+  event.preventDefault();
+  goToNeighbor(...moves[event.key]);
+});
+for (const [id, move] of [['#seat-prev', [0, -1]], ['#seat-next', [0, 1]]]) {
+  document.querySelector(id)?.addEventListener('click', () => goToNeighbor(...move));
+}

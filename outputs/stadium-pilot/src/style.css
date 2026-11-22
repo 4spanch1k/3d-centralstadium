@@ -143,3 +143,6 @@ button { cursor: pointer; }
 
 .veil { position: absolute; inset: 0; z-index: 2; background: #14181a; opacity: 0; pointer-events: none; transition: opacity .4s ease; }
 .veil.on { opacity: .9; transition: opacity .1s ease; }
+
+.neighbor-nav { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 12px; }
+.neighbor-nav .secondary-action { margin-top: 0; min-height: 40px; font-size: 13px; }
