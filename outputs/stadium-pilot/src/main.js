@@ -1218,16 +1218,22 @@ async function tryPanorama(position, token) {
   initialYaw = nodeYaw;
   yaw = nodeYaw;
   panoScene.add(panoSphere);
-  const halfH = Math.atan(Math.tan(THREE.MathUtils.degToRad(64 / 2)) * Math.min(camera.aspect, 2.2));
+  const fov = seatFov();
+  const halfH = Math.atan(Math.tan(THREE.MathUtils.degToRad(fov / 2)) * Math.min(camera.aspect, 2.2));
   panoYawLimit = Math.max(0.05, lon - halfH - 0.03);
-  panoPitchLimit = Math.max(0.03, Math.min(up, down) - THREE.MathUtils.degToRad(64 / 2) - 0.02);
+  panoPitchLimit = Math.max(0.03, Math.min(up, down) - THREE.MathUtils.degToRad(fov / 2) - 0.02);
   panoMode = true;
   yaw = THREE.MathUtils.clamp(yaw, initialYaw - panoYawLimit, initialYaw + panoYawLimit);
-  pitch = THREE.MathUtils.clamp(pitch, -panoPitchLimit, panoPitchLimit);
+  // Стартовый взгляд чуть выше горизонта: видно поле, а не кресла под ногами.
+  pitch = THREE.MathUtils.clamp(0.04, -panoPitchLimit, panoPitchLimit);
+  camera.fov = fov;
+  camera.updateProjectionMatrix();
   lookFromSeat();
   markDirty();
 }
 let panoToken = 0;
+// На узком (портретном) экране угол обзора шире, чтобы в кадр попадало поле, а не только ряд кресел.
+const seatFov = () => (camera.aspect < 0.8 ? 80 : 64);
 const panoCacheLimit = lowPower ? 2 : 4;
 // Загружает и сразу выгружает на видеокарту панораму; в кэше держим ограниченное число (память).
 async function getPanoTexture(file) {
@@ -1266,7 +1272,7 @@ function showSeat() {
   pitch = -0.12;
   tryPanorama(position, panoToken);
   const direction = new THREE.Vector3(Math.cos(pitch) * Math.cos(yaw), Math.sin(pitch), Math.cos(pitch) * Math.sin(yaw));
-  moveCamera(position, position.clone().add(direction), 64, false);
+  moveCamera(position, position.clone().add(direction), seatFov(), false);
   updateCameraFraming();
   document.querySelector('#preview-place').textContent = currentPlace();
   showBookingStep('preview');
