@@ -571,13 +571,16 @@ const yellow = new THREE.InstancedMesh(lowSeatGeometry, yellowSeats, rows * seat
 const blue = new THREE.InstancedMesh(lowSeatGeometry, blueSeats, rows * seatsPerRow);
 const green = new THREE.InstancedMesh(lowSeatGeometry, greenSeats, rows * seatsPerRow);
 const modelLoader = new GLTFLoader();
-modelLoader.load('/alatau-terrain.glb', (model) => {
-  model.scene.traverse((object) => {
-    if (object.isMesh) object.material = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
-    object.layers.set(1);
-  });
-  scene.add(model.scene);
-}, undefined, (error) => console.error('Не удалось загрузить рельеф гор:', error));
+// Горы подгружаются чуть позже первого кадра: стадион появляется быстрее, особенно на телефоне.
+setTimeout(() => {
+  modelLoader.load('/alatau-terrain.glb', (model) => {
+    model.scene.traverse((object) => {
+      if (object.isMesh) object.material = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
+      object.layers.set(1);
+    });
+    scene.add(model.scene);
+  }, undefined, (error) => console.error('Не удалось загрузить рельеф гор:', error));
+}, 1500);
 modelLoader.load('/stadium-seat.glb', (model) => {
   const seat = model.scene.getObjectByName('Stadium_seat');
   if (!seat?.isMesh) {
@@ -1796,3 +1799,8 @@ window.addEventListener('keydown', (event) => {
   updateHash();
 });
 document.querySelector('#close-booking').addEventListener('click', updateHash);
+
+// Кэш панорам в браузере (только в собранной версии): повторные заходы быстрее и дешевле по трафику.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+}
