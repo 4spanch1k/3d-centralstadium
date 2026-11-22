@@ -140,3 +140,6 @@ button { cursor: pointer; }
 
 .loading { position: absolute; z-index: 4; top: 76px; left: 50%; transform: translateX(-50%); margin: 0; padding: 8px 16px; border-radius: 999px; background: var(--paper); box-shadow: var(--shadow); font-size: 13px; color: var(--muted); pointer-events: none; }
 .loading[hidden] { display: none; }
+
+.veil { position: absolute; inset: 0; z-index: 2; background: #14181a; opacity: 0; pointer-events: none; transition: opacity .4s ease; }
+.veil.on { opacity: .9; transition: opacity .1s ease; }

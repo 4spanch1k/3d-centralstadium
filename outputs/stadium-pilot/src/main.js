@@ -969,13 +969,13 @@ let lastX = 0;
 let lastY = 0;
 let cameraTransition;
 let firstView = true;
-function moveCamera(position, target, fov, orbit) {
+function moveCamera(position, target, fov, orbit, instant = false) {
   const destination = camera.clone();
   destination.position.copy(position);
   destination.lookAt(target);
   controls.enabled = false;
   if (orbit) controls.target.copy(target);
-  const duration = firstView || matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 850;
+  const duration = instant || firstView || matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 850;
   firstView = false;
   cameraTransition = {
     start: performance.now(), duration, orbit,
@@ -1186,23 +1186,22 @@ let panoPitchLimit = 0.35;
 let panoNodes = null;
 const panoTextures = new Map();
 let panoSphere;
+let panoNodeList = null;
 function loadPanoNodes() {
   if (!panoNodes) {
-    panoNodes = fetch('/panoramas/index.json').then((response) => (response.ok ? response.json() : [])).catch(() => []);
+    panoNodes = fetch('/panoramas/index.json').then((response) => (response.ok ? response.json() : [])).catch(() => []).then((list) => { panoNodeList = list; return list; });
   }
   return panoNodes;
 }
-async function tryPanorama(position, token) {
-  const nodes = await loadPanoNodes();
+function chooseNode(nodes, position) {
   const seat = selectedSeat;
   // Узел берётся из того же сектора (ближайший по расстоянию); для узлов без привязки к сектору действует радиус.
-  const node = nodes.map((item) => ({ item, distance: Math.hypot(item.position[0] - position.x, item.position[1] - position.y, item.position[2] - position.z) }))
+  return nodes.map((item) => ({ item, distance: Math.hypot(item.position[0] - position.x, item.position[1] - position.y, item.position[2] - position.z) }))
     .filter((entry) => (entry.item.sector ? entry.item.stand === seat?.stand && entry.item.sector === seat?.sector : entry.distance < (entry.item.radius ?? 3)))
     .sort((a, b) => a.distance - b.distance)[0]?.item;
-  if (!node || token !== panoToken) return;
-  const texture = await getPanoTexture(node.file);
-  if (!texture) return;
-  if (token !== panoToken || view !== 'seat') return;
+}
+// Применяет панораму: сфера с картинкой, пределы поворота, стартовый взгляд. Возвращает true, если панорама показана.
+function applyPanorama(node, texture, position) {
   const lon = THREE.MathUtils.degToRad(node.lon);
   const up = THREE.MathUtils.degToRad(node.latUp);
   const down = THREE.MathUtils.degToRad(node.latDown);
@@ -1211,8 +1210,7 @@ async function tryPanorama(position, token) {
   const material = new THREE.MeshBasicMaterial({ map: texture, side: THREE.BackSide, toneMapped: false });
   panoSphere = new THREE.Mesh(geometry, material);
   panoSphere.position.set(position.x, position.y, position.z);
-  // Центр изображения (долгота 0) смотрит в сторону поля, как камера при рендере.
-  // Картинка привязана к направлению узла на поле; взгляд по умолчанию тоже туда.
+  // Картинка привязана к направлению узла на поле (центр изображения смотрит туда); взгляд по умолчанию тоже туда.
   const nodeYaw = node.yaw ?? initialYaw;
   panoSphere.rotation.y = Math.PI - lon - nodeYaw;
   initialYaw = nodeYaw;
@@ -1230,6 +1228,26 @@ async function tryPanorama(position, token) {
   camera.updateProjectionMatrix();
   lookFromSeat();
   markDirty();
+}
+// Мягкий вход: короткое затемнение скрывает подмену живой сцены на панораму.
+const veil = document.querySelector('#veil');
+function withVeil(action) {
+  if (!veil || matchMedia('(prefers-reduced-motion: reduce)').matches) { action(); return; }
+  veil.classList.add('on');
+  markDirty();
+  setTimeout(() => { action(); markDirty(); veil.classList.remove('on'); }, 110);
+}
+// Асинхронный путь: панорама ещё не загружена (или узлы не получены) — показываем живую сцену и подменяем, когда картинка готова.
+async function tryPanorama(position, token) {
+  const nodes = await loadPanoNodes();
+  const node = chooseNode(nodes, position);
+  if (!node || token !== panoToken) return;
+  const texture = await getPanoTexture(node.file);
+  if (!texture || token !== panoToken || view !== 'seat') return;
+  withVeil(() => {
+    if (token !== panoToken || view !== 'seat') return;
+    applyPanorama(node, texture, position);
+  });
 }
 let panoToken = 0;
 // На узком (портретном) экране угол обзора шире, чтобы в кадр попадало поле, а не только ряд кресел.
@@ -1270,9 +1288,22 @@ function showSeat() {
   yaw = Math.atan2(-position.z, -position.x);
   initialYaw = yaw;
   pitch = -0.12;
-  tryPanorama(position, panoToken);
-  const direction = new THREE.Vector3(Math.cos(pitch) * Math.cos(yaw), Math.sin(pitch), Math.cos(pitch) * Math.sin(yaw));
-  moveCamera(position, position.clone().add(direction), seatFov(), false);
+  // Если панорама уже в кэше, переходим сразу (без пролёта по живой сцене), под коротким затемнением.
+  const cachedNode = panoNodeList ? chooseNode(panoNodeList, position) : null;
+  const cachedTexture = cachedNode && panoTextures.get(cachedNode.file);
+  if (cachedNode && cachedTexture) {
+    const token = panoToken;
+    withVeil(() => {
+      if (token !== panoToken || view !== 'seat') return;
+      applyPanorama(cachedNode, cachedTexture, position);
+      const look = new THREE.Vector3(Math.cos(pitch) * Math.cos(yaw), Math.sin(pitch), Math.cos(pitch) * Math.sin(yaw));
+      moveCamera(position, position.clone().add(look), seatFov(), false, true);
+    });
+  } else {
+    tryPanorama(position, panoToken);
+    const direction = new THREE.Vector3(Math.cos(pitch) * Math.cos(yaw), Math.sin(pitch), Math.cos(pitch) * Math.sin(yaw));
+    moveCamera(position, position.clone().add(direction), seatFov(), false);
+  }
   updateCameraFraming();
   document.querySelector('#preview-place').textContent = currentPlace();
   showBookingStep('preview');
