@@ -3,7 +3,7 @@
 The field keeps its original dimensions. Only the bowl footprint and seat
 positions are scaled to 227 x 175 m; seat meshes and heights are not scaled.
 The intermediate landing, aisle steps and rails follow the existing site geometry.
-Seat directions follow the neighboring exported seats after scaling.
+Seat directions follow the row tangent after scaling, including across gaps.
 Seat identifiers are copied from work/exports/seats.json, produced by
 window.__debug.exportSeats() on the development server. The number of rows and
 all positions remain approximate, not surveyed stadium data.
@@ -90,12 +90,20 @@ bpy.context.collection.objects.link(bowl)
 
 # Match the eight aisle centers to the same fractions of each unscaled row path.
 aisles = [[] for _ in range(8)]
+row_segments = {}
 steps = bmesh.new()
 for row in range(34):
     step = row * 0.72 + (2 if row >= 15 else 0)
     row_path = outline(71 + step, 53 + step, 29 + step, segments=64)
     start = 3 * 65 - 1
     row_path = row_path[start:] + row_path[:start + 1]
+    segments = []
+    for a, b in zip(row_path, row_path[1:]):
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        length_squared = dx * dx + dy * dy
+        if length_squared:
+            segments.append((a[0], a[1], dx, dy, length_squared))
+    row_segments[round(1.72 + row * 0.37, 2)] = segments
     lengths = [0.0]
     for start, end in zip(row_path, row_path[1:]):
         lengths.append(lengths[-1] + math.hypot((end[0] - start[0]) / scale_x,
@@ -155,16 +163,16 @@ bpy.context.collection.objects.link(rail_object)
 
 seat_collection = bpy.data.collections.new('Seats')
 bpy.context.scene.collection.children.link(seat_collection)
-for index, (stand, sector, row, number, x, y, z) in enumerate(seats):
+for stand, sector, row, number, x, y, z in seats:
     seat = bpy.data.objects.new(f'{stand}-{sector}-{row}-{number}', seat_mesh)
     seat.location = (x * scale_x, -z * scale_z, y - 1)
-    if index + 1 < len(seats) and seats[index + 1][5] == y:
-        other = seats[index + 1]
-        dx, dy = other[4] - x, z - other[6]
-    else:
-        other = seats[index - 1]
-        dx, dy = x - other[4], other[6] - z
-    seat.rotation_euler.z = math.atan2(dy * scale_z, dx * scale_x)
+    closest = float('inf')
+    for px, py, dx, dy, length_squared in row_segments[round(y, 2)]:
+        t = max(0, min(1, ((seat.location.x - px) * dx + (seat.location.y - py) * dy) / length_squared))
+        distance = (seat.location.x - px - t * dx) ** 2 + (seat.location.y - py - t * dy) ** 2
+        if distance < closest:
+            closest = distance
+            seat.rotation_euler.z = math.atan2(dy, dx)
     seat['stand'], seat['sector'], seat['row'], seat['number'] = stand, sector, row, number
     seat_collection.objects.link(seat)
 
