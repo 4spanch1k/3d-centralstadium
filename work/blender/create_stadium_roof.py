@@ -54,6 +54,8 @@ transform = (Matrix.Translation((0, (front + rear) / 2, height((front + rear) / 
 bmesh.ops.transform(meshes['Roof panels'], matrix=transform, verts=vertices)
 
 for x in range(-72, 73, 6):
+    beam('Roof panels', (x, front, height(front) + 0.08),
+         (x, rear, height(rear) + 0.08), 0.045, 0.045)
     beam('Roof framing', (x, front, height(front) - 0.12), (x, rear, height(rear) - 0.12), 0.12, 0.12)
 for y in range(57, 96, 3):
     beam('Roof framing', (-half_length, y, height(y) - 0.12), (half_length, y, height(y) - 0.12), 0.10, 0.10)

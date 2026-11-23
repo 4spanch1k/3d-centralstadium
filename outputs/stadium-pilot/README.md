@@ -133,7 +133,7 @@ ffmpeg -i outputs/stadium-pilot/public/stadium-orbit-mobile.mp4 -an -c:v libvpx-
 
 ### Подготовленные модели и новые габариты
 
-Собственная крыша `public/stadium-roof.glb` создана скриптом `work/blender/create_stadium_roof.py`: настил примерно 149 × 39 м, высота около 20 м, западная сторона. Собственные четыре 40-метровые мачты создаёт `work/blender/create_floodlight_masts.py`; `public/floodlight-masts.glb` пока не подключён к сцене.
+Собственная крыша `public/stadium-roof.glb` создана скриптом `work/blender/create_stadium_roof.py`: настил примерно 149 × 39 м с продольными швами, высота около 20 м, западная сторона. Собственные четыре 40-метровые мачты создаёт `work/blender/create_floodlight_masts.py`; `public/floodlight-masts.glb` пока не подключён к сцене.
 
 Для приближённых габаритов чаши 227 × 175 м подготовлен отдельный Blender-предпросмотр `work/blender/create_scaled_bowl.py` на основе локального экспорта мест; на сайте остаётся прежняя чаша до интеграции. Данные размеров — ориентиры из предоставленного исследования OpenStreetMap, фактические места и ряды не обмерены. Порядок интеграции и параметры карты затенения описаны в `work/stadium-geometry-handoff.md`. Новые модели созданы для проекта, сторонние модели не использованы.
 
