@@ -11,7 +11,8 @@ window.__debug.exportSeats() on the development server. The number of rows and
 all positions remain approximate, not surveyed stadium data.
 
 Run: Blender -b -P work/blender/create_scaled_bowl.py
-Output: work/exports/stadium-bowl-scaled.blend (not connected to the website).
+Output: work/exports/stadium-bowl-scaled.blend and stadium-bowl-static.glb.
+Neither output is connected to the website.
 """
 import json
 import math
@@ -362,4 +363,10 @@ scene.render.resolution_percentage = 100
 bpy.context.preferences.filepaths.save_version = 0
 output = root / 'work/exports/stadium-bowl-scaled.blend'
 bpy.ops.wm.save_as_mainfile(filepath=str(output))
+bpy.ops.object.select_all(action='DESELECT')
+for name in ('Scaled bowl', 'Aisle steps', 'Aisle rails', 'Exit frames'):
+    bpy.data.objects[name].select_set(True)
+static_output = root / 'work/exports/stadium-bowl-static.glb'
+bpy.ops.export_scene.gltf(filepath=str(static_output), export_format='GLB', use_selection=True)
 print(f'Bowl: 227 x 175 m; scale x={scale_x:.6f}, z={scale_z:.6f}; seats={len(seats)}')
+print(f'Static bowl: {static_output}')
