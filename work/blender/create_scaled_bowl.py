@@ -2,6 +2,7 @@
 
 The field keeps its original dimensions. Only the bowl footprint and seat
 positions are scaled to 227 x 175 m; seat meshes and heights are not scaled.
+Seat directions follow the neighboring exported seats after scaling.
 Seat identifiers are copied from work/exports/seats.json, produced by
 window.__debug.exportSeats() on the development server. The number of rows and
 all positions remain approximate, not surveyed stadium data.
@@ -75,10 +76,16 @@ bpy.context.collection.objects.link(bowl)
 
 seat_collection = bpy.data.collections.new('Seats')
 bpy.context.scene.collection.children.link(seat_collection)
-for stand, sector, row, number, x, y, z in seats:
+for index, (stand, sector, row, number, x, y, z) in enumerate(seats):
     seat = bpy.data.objects.new(f'{stand}-{sector}-{row}-{number}', seat_mesh)
     seat.location = (x * scale_x, -z * scale_z, y - 1)
-    seat.rotation_euler.z = math.atan2(-seat.location.x, seat.location.y)
+    if index + 1 < len(seats) and seats[index + 1][5] == y:
+        other = seats[index + 1]
+        dx, dy = other[4] - x, z - other[6]
+    else:
+        other = seats[index - 1]
+        dx, dy = x - other[4], other[6] - z
+    seat.rotation_euler.z = math.atan2(dy * scale_z, dx * scale_x)
     seat['stand'], seat['sector'], seat['row'], seat['number'] = stand, sector, row, number
     seat_collection.objects.link(seat)
 
