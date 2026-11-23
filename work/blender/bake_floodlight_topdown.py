@@ -34,6 +34,9 @@ for index, value in enumerate(argv):
     if value == '--extra-glb':
         bpy.ops.import_scene.gltf(filepath=os.path.abspath(argv[index + 1]))
 scene = bpy.context.scene
+for obj in scene.objects:
+    if obj.type == 'LIGHT':
+        obj.hide_render = True
 bpy.context.view_layer.update()
 
 # Высокое остаётся в сцене (даёт тени), но не попадает в кадр.

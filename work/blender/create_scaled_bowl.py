@@ -4,6 +4,7 @@ The field keeps its original dimensions. Only the bowl footprint and seat
 positions are scaled to 227 x 175 m; seat meshes and heights are not scaled.
 The intermediate landing, aisle steps, rails and exit frames follow the existing site geometry.
 The preview includes a field, running track, west roof, east masts and repositioned west facade.
+It also includes a camera and light for rendering the assembled model.
 Seat directions follow the row tangent after scaling, including across gaps.
 Seat identifiers are copied from work/exports/seats.json, produced by
 window.__debug.exportSeats() on the development server. The number of rows and
@@ -282,6 +283,27 @@ for asset_name in ('stadium-roof.glb', 'floodlight-masts.glb', 'west-facade.glb'
         for obj in imported:
             if obj.parent not in imported:
                 obj.location.y += 15
+
+scene = bpy.context.scene
+scene.world = bpy.data.worlds.new('Preview sky')
+scene.world.color = (0.3, 0.3, 0.3)
+bpy.ops.object.light_add(type='SUN', location=(0, 0, 80))
+bpy.context.object.name = 'Preview sun'
+bpy.context.object.rotation_euler = (0.45, -0.35, -0.45)
+bpy.context.object.data.energy = 2
+bpy.ops.object.camera_add(location=(210, 250, 190))
+camera = bpy.context.object
+camera.name = 'Preview camera'
+camera.rotation_euler = (Vector((0, 0, 2)) - camera.location).to_track_quat('-Z', 'Y').to_euler()
+camera.data.type = 'ORTHO'
+camera.data.ortho_scale = 330
+scene.camera = camera
+scene.render.engine = 'CYCLES'
+scene.cycles.samples = 32
+scene.cycles.use_denoising = True
+scene.render.resolution_x = 1280
+scene.render.resolution_y = 720
+scene.render.resolution_percentage = 100
 
 bpy.context.preferences.filepaths.save_version = 0
 output = root / 'work/exports/stadium-bowl-scaled.blend'
