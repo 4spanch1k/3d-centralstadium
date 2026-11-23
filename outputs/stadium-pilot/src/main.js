@@ -17,7 +17,9 @@ const canvas = document.querySelector('#stadium');
 const introVideo = document.querySelector('#stadium-intro');
 let renderer;
 try {
-  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+  // Сглаживание краёв MSAA оставлено включённым для качества: замер показал выигрыш без него только около 1 мс (?aa=0 отключает для проверки).
+  const antialias = new URLSearchParams(location.search).get('aa') !== '0';
+  renderer = new THREE.WebGLRenderer({ canvas, antialias, powerPreference: 'high-performance' });
 } catch (error) {
   document.querySelector('#error').hidden = false;
   throw error;
