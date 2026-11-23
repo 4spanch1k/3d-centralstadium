@@ -3,7 +3,7 @@
 The field keeps its original dimensions. Only the bowl footprint and seat
 positions are scaled to 227 x 175 m; seat meshes and heights are not scaled.
 The intermediate landing, aisle steps, rails and exit frames follow the existing site geometry.
-The preview includes a field, running track, west roof, east masts and repositioned west facade.
+The preview includes a field, running track, west roof, east masts and west facade.
 It also includes a camera and light for rendering the assembled model.
 Seat directions follow the row tangent after scaling, including across gaps.
 Seat identifiers are copied from work/exports/seats.json, produced by
@@ -275,14 +275,7 @@ for stand, sector, row, number, x, y, z in seats:
     seat_collection.objects.link(seat)
 
 for asset_name in ('stadium-roof.glb', 'floodlight-masts.glb', 'west-facade.glb'):
-    previous_objects = set(bpy.data.objects)
     bpy.ops.import_scene.gltf(filepath=str(root / 'outputs/stadium-pilot/public' / asset_name))
-    imported = set(bpy.data.objects) - previous_objects
-    if asset_name == 'west-facade.glb':
-        # The site facade is at 88 m; the enlarged bowl needs it at 103 m.
-        for obj in imported:
-            if obj.parent not in imported:
-                obj.location.y += 15
 
 scene = bpy.context.scene
 scene.world = bpy.data.worlds.new('Preview sky')

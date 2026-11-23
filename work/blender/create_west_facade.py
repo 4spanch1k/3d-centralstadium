@@ -4,7 +4,7 @@
 размеры оценочные. Без логотипов, скульптур и надписей. Начало координат GLB уже в мировой точке сцены:
 фасад стоит снаружи западной трибуны (Three.js: x=0, z=-FACADE_Z), лицом наружу (-z Three.js = +Y Blender).
 Запуск: Blender -b -P work/blender/create_west_facade.py
-Для увеличенной чаши: Blender -b -P work/blender/create_west_facade.py -- --z 103 --preview
+Для отдельного теста: Blender -b -P work/blender/create_west_facade.py -- --z 103 --preview
 """
 import argparse
 import sys
@@ -14,7 +14,7 @@ from mathutils import Matrix
 
 root = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser()
-parser.add_argument('--z', type=float, default=88.0)
+parser.add_argument('--z', type=float, default=103.0)
 parser.add_argument('--preview', action='store_true')
 args = parser.parse_args(sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else [])
 FACADE_Z = args.z  # расстояние от центра поля до оси фасада в Three.js

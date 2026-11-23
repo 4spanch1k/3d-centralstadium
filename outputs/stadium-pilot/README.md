@@ -128,7 +128,7 @@ ffmpeg -i outputs/stadium-pilot/public/stadium-orbit-desktop.mp4 -an -c:v libvpx
 ffmpeg -i outputs/stadium-pilot/public/stadium-orbit-mobile.mp4 -an -c:v libvpx-vp9 -b:v 0 -crf 35 -deadline good -cpu-used 5 -row-mt 1 outputs/stadium-pilot/public/stadium-orbit-mobile.webm
 ```
 
-**Главный фасад (западный вход).** Собственная модель (`work/blender/create_west_facade.py`, `public/west-facade.glb`, около 2,6 тыс. треугольников): арка на пять опор, балка с балюстрадой и вывесочной панелью, две башни с медальонами, ворота, низкие крылья. Пропорции оценены по фотографии главного фасада (Wikimedia Commons, «Ortalyq-Almaty_2022e», автор CD, CC BY-SA 4.0: https://commons.wikimedia.org/wiki/File:Ortalyq-Almaty_2022e.jpg) только как ориентир; геометрия своя, без логотипов, скульптур и надписей. Модель из 3D Warehouse (ArchCode) не используется: у неё лицензия «только некоммерческое использование».
+**Главный фасад (западный вход).** Собственная модель (`work/blender/create_west_facade.py`, `public/west-facade.glb`, около 2,6 тыс. треугольников): арка на пять опор, балка с балюстрадой и вывесочной панелью, две башни с медальонами, ворота, низкие крылья. Фасад сдвинут от центра на 103 м, чтобы не пересекаться с опорами крыши; соединение с трибуной остаётся приблизительным. Пропорции оценены по фотографии главного фасада (Wikimedia Commons, «Ortalyq-Almaty_2022e», автор CD, CC BY-SA 4.0: https://commons.wikimedia.org/wiki/File:Ortalyq-Almaty_2022e.jpg) только как ориентир; геометрия своя, без логотипов, скульптур и надписей. Модель из 3D Warehouse (ArchCode) не используется: у неё лицензия «только некоммерческое использование».
 
 
 ### Подготовленные модели и новые габариты
