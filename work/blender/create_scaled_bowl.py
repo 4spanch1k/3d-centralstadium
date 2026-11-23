@@ -2,7 +2,7 @@
 
 The field keeps its original dimensions. Only the bowl footprint and seat
 positions are scaled to 227 x 175 m; seat meshes and heights are not scaled.
-The intermediate landing, aisle steps and rails follow the existing site geometry.
+The intermediate landing, aisle steps, rails and exit frames follow the existing site geometry.
 Seat directions follow the row tangent after scaling, including across gaps.
 Seat identifiers are copied from work/exports/seats.json, produced by
 window.__debug.exportSeats() on the development server. The number of rows and
@@ -160,6 +160,26 @@ rails.free()
 rail_mesh.materials.append(steel)
 rail_object = bpy.data.objects.new('Aisle rails', rail_mesh)
 bpy.context.collection.objects.link(rail_object)
+
+exit_frames = bmesh.new()
+for points in aisles:
+    top = points[-1]
+    outward = Vector((top.x, top.y)).normalized()
+    center = Vector((top.x + outward.x * 1.5, top.y + outward.y * 1.5, top.z - 0.3))
+    rotation = Matrix.Rotation(math.atan2(-outward.x, outward.y), 4, 'Z')
+    for x, height, width, z in ((-1.45, 3.4, 0.5, 1.7),
+                                 (1.45, 3.4, 0.5, 1.7),
+                                 (0, 0.5, 2.4, 3.15)):
+        transform = (Matrix.Translation(center) @ rotation @ Matrix.Translation((x, 0, z))
+                     @ Matrix.Diagonal((width, 0.9, height, 1)))
+        corners = bmesh.ops.create_cube(exit_frames, size=1)['verts']
+        bmesh.ops.transform(exit_frames, matrix=transform, verts=corners)
+exit_mesh = bpy.data.meshes.new('Exit frames')
+exit_frames.to_mesh(exit_mesh)
+exit_frames.free()
+exit_mesh.materials.append(concrete)
+exit_object = bpy.data.objects.new('Exit frames', exit_mesh)
+bpy.context.collection.objects.link(exit_object)
 
 seat_collection = bpy.data.collections.new('Seats')
 bpy.context.scene.collection.children.link(seat_collection)
