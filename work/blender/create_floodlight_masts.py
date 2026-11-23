@@ -60,8 +60,9 @@ for x in (-84, -28, 28, 84):
     for col in range(8):
         for row in range(3):
             lx, lz = x - 2.8 + col * 0.8, 37.3 + row * 1.0
-            beam('Lamp face', (lx - 0.25, y + 0.16, lz),
-                 (lx + 0.25, y + 0.16, lz), 0.62, 0.05)
+            vertices = bmesh.ops.create_cube(meshes['Lamp face'], size=1)['verts']
+            bmesh.ops.scale(meshes['Lamp face'], vec=(0.5, 0.05, 0.62), verts=vertices)
+            bmesh.ops.translate(meshes['Lamp face'], vec=(lx, y + 0.16, lz), verts=vertices)
 
 for name, bm in meshes.items():
     mesh = bpy.data.meshes.new(name)
