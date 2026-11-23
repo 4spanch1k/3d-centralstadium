@@ -1979,6 +1979,15 @@ function applyPixelRatio(value) {
   composer?.setPixelRatio(value);
   composer?.setSize(window.innerWidth, window.innerHeight);
 }
+// Счётчик кадров для проверки на разных компьютерах: добавьте ?fps=1 к адресу. Показывает частоту, время кадра (среднее и 95%), разрешение и нагрузку.
+const fpsPanel = new URLSearchParams(location.search).get('fps') === '1' ? (() => {
+  const element = document.createElement('pre');
+  element.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:9;margin:0;padding:6px 8px;background:rgba(0,0,0,.72);color:#9fe8a0;font:11px/1.4 ui-monospace,monospace;pointer-events:none;border-radius:6px';
+  document.body.appendChild(element);
+  return element;
+})() : null;
+const fpsGaps = [];
+let fpsShownAt = 0;
 renderer.setAnimationLoop(() => {
   const now = performance.now();
   const active = Boolean(cameraTransition) || now - lastActivity < 1800;
@@ -1987,6 +1996,16 @@ renderer.setAnimationLoop(() => {
   const gap = now - lastRender;
   if (gap < (active ? 15 : 50)) return;
   lastRender = now;
+  if (fpsPanel && gap < 500) {
+    fpsGaps.push(gap);
+    if (now - fpsShownAt > 1000 && fpsGaps.length > 5) {
+      fpsShownAt = now;
+      const sorted = [...fpsGaps].sort((x, y) => x - y);
+      const average = fpsGaps.reduce((sum, value) => sum + value, 0) / fpsGaps.length;
+      fpsPanel.textContent = `${(1000 / average).toFixed(0)} fps · ${average.toFixed(1)} мс · p95 ${sorted[Math.floor(sorted.length * 0.95)].toFixed(1)} мс\nразрешение ${pixelRatio.toFixed(2)}× · ${canvas.width}×${canvas.height}\nвызовов ${renderer.info.render.calls} · треугольников ${(renderer.info.render.triangles / 1e6).toFixed(2)} млн\n${view}/${stage}${eveningMode ? ' · вечер' : ''}${composer ? ' · композитор' : ''}`;
+      fpsGaps.length = 0;
+    }
+  }
   // Смена разрешения очищает холст, поэтому применяется в начале кадра, прямо перед отрисовкой: иначе мелькает пустой кадр.
   // Разрешение при переходах между видами не меняется: смена размера холста давала мигание текстур.
   const viewCap = maxPixelRatio;
