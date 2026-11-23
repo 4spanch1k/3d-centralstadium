@@ -67,7 +67,7 @@ cam = bpy.data.objects.new('Top', bpy.data.cameras.new('Top')); scene.collection
 cam.data.type = 'ORTHO'; cam.data.ortho_scale = X1 - X0
 cam.location = ((X0 + X1) / 2, -(Z0 + Z1) / 2, 80.0)
 cam.rotation_euler = (0, 0, 0)       # смотрит вниз (-Z), вверх кадра = +y Blender = -z Three
-cam.data.clip_start = 1.0; cam.data.clip_end = 200.0
+cam.data.clip_start = cam.location.z - HIDE_ABOVE; cam.data.clip_end = 200.0
 scene.camera = cam
 scene.render.resolution_x = px; scene.render.resolution_y = int(px * (Z1 - Z0) / (X1 - X0))
 scene.render.resolution_percentage = 100
