@@ -2,7 +2,7 @@
 
 The field keeps its original dimensions. Only the bowl footprint and seat
 positions are scaled to 227 x 175 m; seat meshes and heights are not scaled.
-The intermediate landing follows the existing site geometry.
+The intermediate landing and aisle rails follow the existing site geometry.
 Seat directions follow the neighboring exported seats after scaling.
 Seat identifiers are copied from work/exports/seats.json, produced by
 window.__debug.exportSeats() on the development server. The number of rows and
@@ -15,7 +15,9 @@ import json
 import math
 from pathlib import Path
 
+import bmesh
 import bpy
+from mathutils import Matrix, Vector
 
 root = Path(__file__).resolve().parents[2]
 seats_path = root / 'work/exports/seats.json'
@@ -85,6 +87,49 @@ mesh.from_pydata(vertices, [], faces)
 mesh.materials.append(concrete)
 bowl = bpy.data.objects.new('Scaled bowl', mesh)
 bpy.context.collection.objects.link(bowl)
+
+# Match the eight aisle centers to the same fractions of each unscaled row path.
+aisles = [[] for _ in range(8)]
+for row in range(34):
+    step = row * 0.72 + (2 if row >= 15 else 0)
+    row_path = outline(71 + step, 53 + step, 29 + step)
+    row_path = row_path[38:] + row_path[:39]
+    lengths = [0.0]
+    for start, end in zip(row_path, row_path[1:]):
+        lengths.append(lengths[-1] + math.hypot((end[0] - start[0]) / scale_x,
+                                                (end[1] - start[1]) / scale_z))
+    for aisle, points in enumerate(aisles):
+        target = lengths[-1] * (aisle * 100 + 2) / 800
+        segment = next(i for i in range(len(lengths) - 1) if lengths[i + 1] >= target)
+        fraction = (target - lengths[segment]) / (lengths[segment + 1] - lengths[segment])
+        start, end = Vector(row_path[segment]), Vector(row_path[segment + 1])
+        point = start.lerp(end, fraction)
+        points.append(Vector((point.x, point.y, 0.45 + row * 0.37 + 0.35)))
+
+steel = bpy.data.materials.new('Aisle rail steel')
+steel.diffuse_color = (0.48, 0.52, 0.52, 1)
+rails = bmesh.new()
+for points in aisles:
+    for row, (start, end) in enumerate(zip(points, points[1:])):
+        for height, width in ((0.85, 0.05), (0.45, 0.036)):
+            a = start + Vector((0, 0, height))
+            b = end + Vector((0, 0, height))
+            direction = b - a
+            transform = (Matrix.Translation((a + b) / 2)
+                         @ direction.to_track_quat('Z', 'Y').to_matrix().to_4x4()
+                         @ Matrix.Diagonal((width, width, direction.length, 1)))
+            corners = bmesh.ops.create_cube(rails, size=1)['verts']
+            bmesh.ops.transform(rails, matrix=transform, verts=corners)
+        if row % 3 == 0:
+            corners = bmesh.ops.create_cube(rails, size=1)['verts']
+            transform = Matrix.Translation(start + Vector((0, 0, 0.425))) @ Matrix.Diagonal((0.04, 0.04, 0.85, 1))
+            bmesh.ops.transform(rails, matrix=transform, verts=corners)
+rail_mesh = bpy.data.meshes.new('Aisle rails')
+rails.to_mesh(rail_mesh)
+rails.free()
+rail_mesh.materials.append(steel)
+rail_object = bpy.data.objects.new('Aisle rails', rail_mesh)
+bpy.context.collection.objects.link(rail_object)
 
 seat_collection = bpy.data.collections.new('Seats')
 bpy.context.scene.collection.children.link(seat_collection)
