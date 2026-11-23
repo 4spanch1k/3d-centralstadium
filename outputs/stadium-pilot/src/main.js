@@ -9,6 +9,8 @@ import greenery from './greenery.json';
 import './style.css';
 
 const initialHash = location.hash;
+// Предрендеренные панорамы (вид из ближайшей точки сектора) отключены по умолчанию: вид с места строится живой сценой из самого кресла. Включить: ?pano=1.
+const usePanoramas = new URLSearchParams(location.search).get('pano') === '1';
 // Все ресурсы берутся относительно базового адреса сборки: работает и в подпапке (например, GitHub Pages).
 const asset = (path) => import.meta.env.BASE_URL + path;
 const canvas = document.querySelector('#stadium');
@@ -127,7 +129,7 @@ function concreteMap(file, color = false) {
   return texture;
 }
 const concreteTexture = concreteMap(asset('concrete-diff.webp'), true);
-const concreteExtras = lowPower ? {} : { normalMap: concreteMap(asset('concrete-normal.webp')), normalScale: new THREE.Vector2(0.7, 0.7), roughnessMap: concreteMap(asset('concrete-rough.webp')) };
+const concreteExtras = lowPower ? {} : { normalMap: concreteMap(asset('concrete-normal.webp')), normalScale: new THREE.Vector2(0.35, 0.35), roughnessMap: concreteMap(asset('concrete-rough.webp')) };
 const concrete = new THREE.MeshStandardMaterial({ color: '#d6d9d3', map: concreteTexture, roughness: 1, ...concreteExtras });
 const darkConcrete = new THREE.MeshStandardMaterial({ color: '#bcc2bc', map: concreteTexture, roughness: 1, ...concreteExtras });
 // Выцветание и разводы бетона: шум по мировым координатам, без отдельных текстур.
@@ -1193,6 +1195,7 @@ const panoTextures = new Map();
 let panoSphere;
 let panoNodeList = null;
 function loadPanoNodes() {
+  if (!usePanoramas) return Promise.resolve([]);
   if (!panoNodes) {
     panoNodes = fetch(asset('panoramas/index.json')).then((response) => (response.ok ? response.json() : Promise.reject(new Error('index')))).then((list) => { panoNodeList = list; return list; }).catch(() => { panoNodes = null; return []; });
   }
@@ -1283,6 +1286,7 @@ async function getPanoTexture(file) {
 }
 // Предзагрузка панорам выбранного сектора, чтобы «Да, посмотреть с места» открывало картинку мгновенно.
 async function preloadPanoramas(stand, sector) {
+  if (!usePanoramas) return;
   const nodes = (await loadPanoNodes()).filter((node) => node.stand === stand && node.sector === sector).slice(0, panoCacheLimit);
   for (const node of nodes) await getPanoTexture(node.file);
 }
@@ -1299,7 +1303,7 @@ function showSeat() {
   initialYaw = yaw;
   pitch = -0.12;
   // Если панорама уже в кэше, переходим сразу (без пролёта по живой сцене), под коротким затемнением.
-  const cachedNode = panoNodeList ? chooseNode(panoNodeList, position) : null;
+  const cachedNode = usePanoramas && panoNodeList ? chooseNode(panoNodeList, position) : null;
   const cachedTexture = cachedNode && panoTextures.get(cachedNode.file);
   // Живая сцена в виде с панорамой не рисуется, поэтому детальные кресла вокруг места собираем только когда панорамы нет.
   if (!cachedTexture) applyDetail('near', position);
@@ -1313,7 +1317,7 @@ function showSeat() {
       moveCamera(position, position.clone().add(look), seatFov(), false, true);
     });
   } else {
-    tryPanorama(position, panoToken);
+    if (usePanoramas) tryPanorama(position, panoToken);
     const direction = new THREE.Vector3(Math.cos(pitch) * Math.cos(yaw), Math.sin(pitch), Math.cos(pitch) * Math.sin(yaw));
     moveCamera(position, position.clone().add(direction), seatFov(), false);
   }
