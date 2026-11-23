@@ -2,6 +2,7 @@
 
 The field keeps its original dimensions. Only the bowl footprint and seat
 positions are scaled to 227 x 175 m; seat meshes and heights are not scaled.
+The intermediate landing follows the existing site geometry.
 Seat directions follow the neighboring exported seats after scaling.
 Seat identifiers are copied from work/exports/seats.json, produced by
 window.__debug.exportSeats() on the development server. The number of rows and
@@ -54,11 +55,18 @@ def outline(half_x, half_y, radius):
 
 
 vertices, faces = [], []
+levels = []
 for row in range(34):
     step = row * 0.72 + (2 if row >= 15 else 0)
     top = 0.45 + row * 0.37
-    outer = outline(71.6 + step, 53.6 + step, 29.5 + step)
-    inner = outline(70.88 + step, 52.88 + step, 28.78 + step)
+    if row == 15:
+        levels.append((83.68, 65.68, 81.68, 63.68, 41.58, top - 0.37))
+    levels.append((71.6 + step, 53.6 + step, 70.88 + step,
+                   52.88 + step, 29.5 + step, top))
+
+for outer_x, outer_y, inner_x, inner_y, radius, top in levels:
+    outer = outline(outer_x, outer_y, radius)
+    inner = outline(inner_x, inner_y, radius - (outer_x - inner_x))
     count = len(outer)
     base = len(vertices)
     for height, outline_points in ((top, outer), (top, inner), (top - 0.38, outer), (top - 0.38, inner)):
