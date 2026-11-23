@@ -2,7 +2,7 @@
 
 The field keeps its original dimensions. Only the bowl footprint and seat
 positions are scaled to 227 x 175 m; seat meshes and heights are not scaled.
-The intermediate landing, aisle steps, rails and exit frames follow the existing site geometry.
+The intermediate landing, front barrier, aisle steps, rails and exits follow the existing site geometry.
 The preview includes a field, goals, running track, west roof, east masts and west facade.
 It also includes a camera and light for rendering the assembled model.
 Seat directions follow the row tangent after scaling, including across gaps.
@@ -197,16 +197,17 @@ for row in range(34):
     step = row * 0.72 + (2 if row >= 15 else 0)
     top = 0.45 + row * 0.37
     if row == 15:
-        levels.append((83.68, 65.68, 81.68, 63.68, 41.58, top - 0.37))
+        levels.append((83.68, 65.68, 81.68, 63.68, 41.58, top - 0.37, 0.38))
     levels.append((71.6 + step, 53.6 + step, 70.88 + step,
-                   52.88 + step, 29.5 + step, top))
+                   52.88 + step, 29.5 + step, top, 0.38))
+levels.append((70.7, 52.7, 70.4, 52.4, 29.3, 0.95, 0.95))
 
-for outer_x, outer_y, inner_x, inner_y, radius, top in levels:
+for outer_x, outer_y, inner_x, inner_y, radius, top, thickness in levels:
     outer = outline(outer_x, outer_y, radius)
     inner = outline(inner_x, inner_y, radius - (outer_x - inner_x))
     count = len(outer)
     base = len(vertices)
-    for height, outline_points in ((top, outer), (top, inner), (top - 0.38, outer), (top - 0.38, inner)):
+    for height, outline_points in ((top, outer), (top, inner), (top - thickness, outer), (top - thickness, inner)):
         vertices.extend((x, y, height) for x, y in outline_points)
     for i in range(count):
         j = (i + 1) % count
@@ -270,6 +271,13 @@ bpy.context.collection.objects.link(step_object)
 steel = bpy.data.materials.new('Aisle rail steel')
 steel.diffuse_color = (0.48, 0.52, 0.52, 1)
 rails = bmesh.new()
+outer = outline(70.72, 52.72, 29.32)
+inner = outline(70.4, 52.4, 29.0)
+outer_vertices = [rails.verts.new((x, y, 1.0)) for x, y in outer]
+inner_vertices = [rails.verts.new((x, y, 1.0)) for x, y in inner]
+for i in range(len(outer_vertices)):
+    j = (i + 1) % len(outer_vertices)
+    rails.faces.new((outer_vertices[i], outer_vertices[j], inner_vertices[j], inner_vertices[i]))
 for points in aisles:
     for row, (start, end) in enumerate(zip(points, points[1:])):
         for height, width in ((0.85, 0.05), (0.45, 0.036)):
