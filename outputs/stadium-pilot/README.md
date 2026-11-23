@@ -120,3 +120,10 @@ nice -n 15 /Applications/Blender.app/Contents/MacOS/Blender -b -P work/blender/r
 Кадры сохраняются в `work/exports/orbit-frames/`. Экспорт сцены не переносит вычисляемое в браузере затенение; освещение и материалы ролика настроены отдельно в Blender.
 
 Готовые кадры кодируются FFmpeg в `public/stadium-orbit-desktop.mp4` и `public/stadium-orbit-desktop.webm` (1280×720), а также в `public/stadium-orbit-mobile.mp4` и `public/stadium-orbit-mobile.webm` (640×360). Все версии содержат 144 кадра с частотой 24 кадра/с; звук отсутствует.
+
+```bash
+ffmpeg -framerate 24 -start_number 1 -i work/exports/orbit-frames/frame-%04d.png -an -c:v libx264 -preset fast -crf 26 -pix_fmt yuv420p -movflags +faststart outputs/stadium-pilot/public/stadium-orbit-desktop.mp4
+ffmpeg -i outputs/stadium-pilot/public/stadium-orbit-desktop.mp4 -vf scale=640:360 -an -c:v libx264 -preset fast -crf 27 -pix_fmt yuv420p -movflags +faststart outputs/stadium-pilot/public/stadium-orbit-mobile.mp4
+ffmpeg -i outputs/stadium-pilot/public/stadium-orbit-desktop.mp4 -an -c:v libvpx-vp9 -b:v 0 -crf 35 -deadline good -cpu-used 5 -row-mt 1 outputs/stadium-pilot/public/stadium-orbit-desktop.webm
+ffmpeg -i outputs/stadium-pilot/public/stadium-orbit-mobile.mp4 -an -c:v libvpx-vp9 -b:v 0 -crf 35 -deadline good -cpu-used 5 -row-mt 1 outputs/stadium-pilot/public/stadium-orbit-mobile.webm
+```
