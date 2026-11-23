@@ -133,7 +133,7 @@ if (!lowPower) {
   };
   grass.normalMap = grassDetail('grass-normal.webp');
   grass.normalScale.set(0.7, 0.7);
-  grass.roughnessMap = grassDetail('grass-rough.webp');
+  // Карта шероховатости не используется: на газоне она давала блики от прожекторов вечером.
 }
 // Бетон: Poly Haven «Damaged Concrete Floor» (CC0) — цвет, нормали и шероховатость; на телефонах только цвет.
 const textureLoader = new THREE.TextureLoader();
@@ -163,7 +163,7 @@ const aoUniforms = {
   uAoMap: { value: aoTexture },
   uLightMap: { value: lightTexture },
   uLightAmount: { value: 0 },
-  uAoRect: { value: new THREE.Vector4(-112, -96, 224, 192) },
+  uAoRect: { value: new THREE.Vector4(-125, -105, 250, 210) },
   uAoStrength: { value: 0.6 },
 };
 function weather(surface, { stains = true, ao = 0.6 } = {}) {
@@ -344,22 +344,29 @@ function box(width, height, depth, x, y, z, surface) {
   return mesh;
 }
 
-function roundedPath(halfWidth, halfDepth, radius, path = new THREE.Path()) {
-  path.moveTo(-halfWidth + radius, -halfDepth);
-  path.lineTo(halfWidth - radius, -halfDepth);
-  path.quadraticCurveTo(halfWidth, -halfDepth, halfWidth, -halfDepth + radius);
-  path.lineTo(halfWidth, halfDepth - radius);
-  path.quadraticCurveTo(halfWidth, halfDepth, halfWidth - radius, halfDepth);
-  path.lineTo(-halfWidth + radius, halfDepth);
-  path.quadraticCurveTo(-halfWidth, halfDepth, -halfWidth, halfDepth - radius);
-  path.lineTo(-halfWidth, -halfDepth + radius);
-  path.quadraticCurveTo(-halfWidth, -halfDepth, -halfWidth + radius, -halfDepth);
+// Чаша увеличена до 227 × 175 м (по данным OpenStreetMap): трибуны растягиваются по x и z, поле и дорожки остаются прежними,
+// кресла, ступени и высоты не меняются. Тот же масштаб использует work/blender/create_scaled_bowl.py.
+const bowlOuterHalfX = 71.6 + 33 * 0.72 + 2;
+const bowlOuterHalfZ = 53.6 + 33 * 0.72 + 2;
+const bowlScaleX = 227 / (2 * bowlOuterHalfX);
+const bowlScaleZ = 175 / (2 * bowlOuterHalfZ);
+function roundedPath(halfWidth, halfDepth, radius, path = new THREE.Path(), sx = 1, sz = 1) {
+  path.moveTo((-halfWidth + radius) * sx, -halfDepth * sz);
+  path.lineTo((halfWidth - radius) * sx, -halfDepth * sz);
+  path.quadraticCurveTo(halfWidth * sx, -halfDepth * sz, halfWidth * sx, (-halfDepth + radius) * sz);
+  path.lineTo(halfWidth * sx, (halfDepth - radius) * sz);
+  path.quadraticCurveTo(halfWidth * sx, halfDepth * sz, (halfWidth - radius) * sx, halfDepth * sz);
+  path.lineTo((-halfWidth + radius) * sx, halfDepth * sz);
+  path.quadraticCurveTo(-halfWidth * sx, halfDepth * sz, -halfWidth * sx, (halfDepth - radius) * sz);
+  path.lineTo(-halfWidth * sx, (-halfDepth + radius) * sz);
+  path.quadraticCurveTo(-halfWidth * sx, -halfDepth * sz, (-halfWidth + radius) * sx, -halfDepth * sz);
   return path;
 }
 
-function ring(outerWidth, outerDepth, innerWidth, innerDepth, radius, height, surface, thickness = 0) {
-  const shape = roundedPath(outerWidth, outerDepth, radius, new THREE.Shape());
-  shape.holes.push(roundedPath(innerWidth, innerDepth, Math.max(radius - (outerWidth - innerWidth), 1)));
+// scale: 0 — без изменений, 1 — увеличивается только внешний контур, 2 — внешний и внутренний (трибуны и барьер).
+function ring(outerWidth, outerDepth, innerWidth, innerDepth, radius, height, surface, thickness = 0, scale = 0) {
+  const shape = roundedPath(outerWidth, outerDepth, radius, new THREE.Shape(), scale >= 1 ? bowlScaleX : 1, scale >= 1 ? bowlScaleZ : 1);
+  shape.holes.push(roundedPath(innerWidth, innerDepth, Math.max(radius - (outerWidth - innerWidth), 1), new THREE.Path(), scale === 2 ? bowlScaleX : 1, scale === 2 ? bowlScaleZ : 1));
   const geometry = thickness
     ? new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: false, curveSegments: 12 })
     : new THREE.ShapeGeometry(shape, 16);
@@ -389,7 +396,7 @@ box(850, 0.5, 850, 0, -0.5, 0, groundMaterial);
   contactGradient.addColorStop(1, 'rgba(20,28,22,0)');
   contactContext.fillStyle = contactGradient;
   contactContext.fillRect(-128, -156, 256, 312);
-  const contact = new THREE.Mesh(new THREE.PlaneGeometry(330, 270), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(contactCanvas), transparent: true, depthWrite: false }));
+  const contact = new THREE.Mesh(new THREE.PlaneGeometry(330 * bowlScaleX, 270 * bowlScaleZ), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(contactCanvas), transparent: true, depthWrite: false }));
   contact.rotation.x = -Math.PI / 2;
   contact.position.y = -0.2;
   scene.add(contact);
@@ -542,12 +549,12 @@ for (const x of [-10, 10]) {
   }
   roofPanel.castShadow = true;
 }
-ring(70, 52, 54, 35, 29, 0.02, darkConcrete);
+ring(70, 52, 54, 35, 29, 0.02, darkConcrete, 0, 1);
 ring(65, 46, 54, 35, 26, 0.04, track);
 for (let i = 0; i <= 8; i += 1) {
   ring(55 + i * 1.22, 36 + i * 1.22, 54.94 + i * 1.22, 35.94 + i * 1.22, 16 + i * 1.22, 0.07, white);
 }
-ring(94, 76, 69, 51, 38, 0.02, darkConcrete);
+ring(94, 76, 69, 51, 38, 0.02, darkConcrete, 0, 2);
 // Номера дорожек и финишная линия на западной прямой (расположение ориентировочное).
 for (let lane = 0; lane < 8; lane += 1) {
   const numberCanvas = document.createElement('canvas');
@@ -587,9 +594,9 @@ scene.add(finish);
 
 
 // Барьер перед первым рядом: бетонный парапет и тонкая светодиодная лента (размеры ориентировочные).
-ring(70.7, 52.7, 70.4, 52.4, 29.3, 0.95, darkConcrete, 0.95);
-ring(70.4, 52.4, 70.38, 52.38, 29.0, 0.4, new THREE.MeshBasicMaterial({ color: '#4c9bff' }), 0.07);
-ring(70.72, 52.72, 70.4, 52.4, 29.32, 1.0, steel, 0.05);
+ring(70.7, 52.7, 70.4, 52.4, 29.3, 0.95, darkConcrete, 0.95, 2);
+ring(70.4, 52.4, 70.38, 52.38, 29.0, 0.4, new THREE.MeshBasicMaterial({ color: '#4c9bff' }), 0.07, 2);
+ring(70.72, 52.72, 70.4, 52.4, 29.32, 1.0, steel, 0.05, 2);
 
 const rows = 34;
 const seatsPerRow = 800;
@@ -693,9 +700,9 @@ let greenCount = 0;
 for (let row = 0; row < rows; row += 1) {
   const step = row * 0.72 + (row >= 15 ? 2 : 0);
   const y = 0.45 + row * 0.37;
-  if (row === 15) ring(83.68, 65.68, 81.68, 63.68, 41.58, y - 0.37, darkConcrete, 0.38);
-  standLevels.push(ring(71.6 + step, 53.6 + step, 70.88 + step, 52.88 + step, 29.5 + step, y, row % 2 ? concrete : darkConcrete, 0.38));
-  const path = roundedPath(71 + step, 53 + step, 29 + step);
+  if (row === 15) ring(83.68, 65.68, 81.68, 63.68, 41.58, y - 0.37, darkConcrete, 0.38, 2);
+  standLevels.push(ring(71.6 + step, 53.6 + step, 70.88 + step, 52.88 + step, 29.5 + step, y, row % 2 ? concrete : darkConcrete, 0.38, 2));
+  const path = roundedPath(71 + step, 53 + step, 29 + step, new THREE.Path(), bowlScaleX, bowlScaleZ);
   const points = path.getSpacedPoints(seatsPerRow);
   for (let aisle = 0; aisle < aisles.length; aisle += 1) {
     const first = points[aisle * 100];
@@ -717,11 +724,11 @@ for (let row = 0; row < rows; row += 1) {
     helper.position.set(point.x, y + 0.27, -point.y);
     helper.rotation.set(0, Math.atan2(next.y - point.y, next.x - point.x), 0);
     helper.updateMatrix();
-    const stand = Math.abs(point.x) / (71 + step) > Math.abs(point.y) / (53 + step)
+    const stand = Math.abs(point.x) / ((71 + step) * bowlScaleX) > Math.abs(point.y) / ((53 + step) * bowlScaleZ)
       ? (point.x > 0 ? 'north' : 'south')
       : (point.y > 0 ? 'west' : 'east');
     if (stand === 'east' && (row === 13 || row === 14)) continue;
-    if (stand === 'west' && Math.abs(point.x) < 12.5 && point.y > 72.5) continue;
+    if (stand === 'west' && Math.abs(point.x) < 12.5 * bowlScaleX && point.y > 72.5 * bowlScaleZ) continue;
     const seat = { stand, row: row + 1, position: helper.position.clone(), matrix: helper.matrix.clone() };
     seatHits.setMatrixAt(seats.length, helper.matrix);
     seats.push(seat);
@@ -1003,7 +1010,7 @@ modelLoader.load(asset('stadium-roof.glb'), (model) => {
 }, undefined, (error) => console.error('Не удалось загрузить модель навеса:', error));
 const roofLights = new THREE.InstancedMesh(new THREE.BoxGeometry(0.75, 0.16, 0.25), new THREE.MeshStandardMaterial({ color: '#f5f2df', emissive: '#e5e0c7', emissiveIntensity: 0.45 }), 33);
 for (let i = 0; i < 33; i += 1) {
-  helper.position.set(-48 + i * 3, 17.45, -58.3);
+  helper.position.set(-48 + i * 3, 18.3, -56.4);
   helper.rotation.set(0, 0, 0);
   helper.updateMatrix();
   roofLights.setMatrixAt(i, helper.matrix);
@@ -1026,8 +1033,8 @@ for (const x of [-52.5, 52.5]) {
 }
 const scoreboardFrame = material('#b7bcb7');
 const scoreboardScreen = material('#151d1d');
-for (const z of [-4.5, 4.5]) box(1, 10, 1, -99, 5, z, scoreboardFrame);
-box(1.2, 7.6, 15, -99, 13.8, 0, scoreboardFrame);
+for (const z of [-4.5, 4.5]) box(1, 10, 1, -99 * bowlScaleX, 5, z, scoreboardFrame);
+box(1.2, 7.6, 15, -99 * bowlScaleX, 13.8, 0, scoreboardFrame);
 const scoreCanvas = document.createElement('canvas');
 scoreCanvas.width = 2048;
 scoreCanvas.height = 960;
@@ -1055,45 +1062,32 @@ scoreTexture.colorSpace = THREE.SRGBColorSpace;
 scoreTexture.anisotropy = 8;
 const scoreLit = new THREE.MeshStandardMaterial({ map: scoreTexture, emissive: '#ffffff', emissiveMap: scoreTexture, emissiveIntensity: 1.2, roughness: 0.35 });
 // Тёмная рамка вокруг экрана табло.
-box(0.04, 7.2, 14.5, -98.38, 13.8, 0, scoreboardScreen);
+box(0.04, 7.2, 14.5, -99 * bowlScaleX + 0.62, 13.8, 0, scoreboardScreen);
 const scoreScreen = new THREE.Mesh(new THREE.BoxGeometry(0.08, 6.4, 13.7), [scoreLit, scoreboardScreen, scoreboardScreen, scoreboardScreen, scoreboardScreen, scoreboardScreen]);
-scoreScreen.position.set(-98.36, 13.8, 0);
+scoreScreen.position.set(-99 * bowlScaleX + 0.64, 13.8, 0);
 scene.add(scoreScreen);
-const towerLines = [];
-const floodlights = new THREE.InstancedMesh(new THREE.BoxGeometry(0.65, 0.5, 0.22), new THREE.MeshStandardMaterial({ color: '#ecede4', emissive: '#fff3d0', emissiveIntensity: 0.6 }), 84);
+// Четыре мачты освещения по 40 м на восточном краю (модель из work/blender/create_floodlight_masts.py).
+// Светящиеся панели ламп (вечером ярче) повторяют положение ламп модели.
+const mastXs = [-84, -28, 28, 84];
+const mastZ = 94;
+modelLoader.load(asset('floodlight-masts.glb'), (model) => {
+  model.scene.traverse((object) => { if (object.isMesh) object.castShadow = true; });
+  scene.add(model.scene);
+  renderer.shadowMap.needsUpdate = true;
+}, undefined, (error) => console.error('Не удалось загрузить мачты:', error));
+const floodlights = new THREE.InstancedMesh(new THREE.BoxGeometry(0.5, 0.62, 0.05), new THREE.MeshStandardMaterial({ color: '#ecede4', emissive: '#fff3d0', emissiveIntensity: 0.6 }), mastXs.length * 24);
 let lightIndex = 0;
-for (const x of [-102, 102]) {
-  for (const z of [-90, 90]) {
-    for (const dx of [-1, 1]) {
-      for (const dz of [-1, 1]) {
-        towerLines.push(x + dx * 1.4, 0, z + dz * 1.4, x + dx * 0.7, 30, z + dz * 0.7);
-      }
-    }
-    for (let y = 0; y < 30; y += 3) {
-      const lower = 1.4 - y * 0.7 / 30;
-      const upper = 1.4 - (y + 3) * 0.7 / 30;
-      for (const side of [-1, 1]) {
-        towerLines.push(x + side * lower, y, z - lower, x + side * upper, y + 3, z + upper);
-        towerLines.push(x - lower, y, z + side * lower, x + upper, y + 3, z + side * upper);
-      }
-    }
-    const angle = Math.atan2(-x, -z);
-    const panel = box(7, 3.2, 0.35, x, 31.2, z, steel);
-    panel.rotation.y = angle;
+for (const x of mastXs) {
+  for (let column = 0; column < 8; column += 1) {
     for (let row = 0; row < 3; row += 1) {
-      for (let column = 0; column < 7; column += 1) {
-        const along = (column - 3) * 0.85;
-        helper.position.set(x + Math.cos(angle) * along + Math.sin(angle) * 0.3, 30.35 + row * 0.85, z - Math.sin(angle) * along + Math.cos(angle) * 0.3);
-        helper.rotation.set(0, angle, 0);
-        helper.updateMatrix();
-        floodlights.setMatrixAt(lightIndex++, helper.matrix);
-      }
+      helper.position.set(x - 2.8 + column * 0.8, 37.3 + row, mastZ - 0.2);
+      helper.rotation.set(0, 0, 0);
+      helper.updateMatrix();
+      floodlights.setMatrixAt(lightIndex++, helper.matrix);
     }
   }
 }
-const towerGeometry = new THREE.BufferGeometry();
-towerGeometry.setAttribute('position', new THREE.Float32BufferAttribute(towerLines, 3));
-scene.add(new THREE.LineSegments(towerGeometry, new THREE.LineBasicMaterial({ color: '#b7c3c0' })), floodlights);
+scene.add(floodlights);
 floodlights.instanceMatrix.needsUpdate = true;
 for (const z of [-50.5, 50.5]) {
   for (let x = -48; x <= 48; x += 4) box(0.06, 1.1, 0.06, x, 0.7, z, steel);
@@ -1125,11 +1119,11 @@ for (const z of [-50.5, 50.5]) {
 }
 
 const views = {
-  overview: { label: 'Общий вид', position: [180, 155, 220] },
-  west: { label: 'Западная трибуна', position: [0, 12, 30], target: [0, 8, -70] },
-  east: { label: 'Восточная трибуна', position: [0, 27, -38], target: [0, 5, 70] },
-  north: { label: 'Северная трибуна', position: [-38, 27, 0], target: [82, 5, 0] },
-  south: { label: 'Южная трибуна', position: [38, 27, 0], target: [-82, 5, 0] },
+  overview: { label: 'Общий вид', position: [200, 170, 245] },
+  west: { label: 'Западная трибуна', position: [0, 12, 30], target: [0, 8, -70 * bowlScaleZ] },
+  east: { label: 'Восточная трибуна', position: [0, 27, -38], target: [0, 5, 70 * bowlScaleZ] },
+  north: { label: 'Северная трибуна', position: [-38, 27, 0], target: [82 * bowlScaleX, 5, 0] },
+  south: { label: 'Южная трибуна', position: [38, 27, 0], target: [-82 * bowlScaleX, 5, 0] },
 };
 let view = 'overview';
 let stage = 'stand';
@@ -1193,7 +1187,7 @@ function setView(name) {
   const target = name === 'overview' ? new THREE.Vector3(0, 4, 0) : new THREE.Vector3(...selected.target);
   const phone = window.innerWidth <= 700;
   // «Выбрать место»: камера плавно поднимается и смотрит на стадион почти строго сверху, чтобы были видны все сектора.
-  if (name === 'overview' && bookingOpen) moveCamera(new THREE.Vector3(0, phone ? 300 : 340, 46), target, phone ? 66 : 38, true, false, 1700);
+  if (name === 'overview' && bookingOpen) moveCamera(new THREE.Vector3(0, phone ? 380 : 440, 58), target, phone ? 66 : 38, true, false, 1700);
   else moveCamera(new THREE.Vector3(...selected.position), target, name === 'overview' ? (phone ? 66 : 38) : 50, name === 'overview');
   updateCameraFraming();
   updateSeatHighlights();
@@ -1992,10 +1986,10 @@ renderer.setAnimationLoop(() => {
   };
   // Прожекторы: четыре мачты по углам освещают поле и трибуны тёплым белым светом (только вечером, без теней).
   const fieldLights = [];
-  for (const x of [-102, 102]) {
-    for (const z of [-90, 90]) {
+  for (const x of mastXs) {
+    for (const z of [mastZ]) {
       const spot = new THREE.SpotLight('#fff1d6', 34000, 0, 0.62, 0.7, 2);
-      spot.position.set(x, 31, z);
+      spot.position.set(x, 38.5, z);
       spot.target.position.set(0, 0, 0);
       spot.visible = false;
       scene.add(spot, spot.target);
@@ -2051,7 +2045,7 @@ renderer.setAnimationLoop(() => {
     eveningMode = mode === 'evening';
     for (const spot of fieldLights) spot.visible = eveningMode;
     aoUniforms.uLightAmount.value = eveningMode ? 0.9 : 0;
-    for (const spot of fieldLights) spot.intensity = 7000;
+    for (const spot of fieldLights) spot.intensity = 2500;
     if (bloomPass) bloomPass.enabled = eveningMode;
     glow.visible = mode === 'evening';
     glow.material.opacity = mode === 'evening' ? 0.4 : 0;
