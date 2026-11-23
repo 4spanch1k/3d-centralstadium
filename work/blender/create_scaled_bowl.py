@@ -12,6 +12,7 @@ all positions remain approximate, not surveyed stadium data.
 
 Run: Blender -b -P work/blender/create_scaled_bowl.py
 Output: work/exports/stadium-bowl-scaled.blend and stadium-bowl-static.glb.
+The static concrete meshes have UV coordinates for the site material.
 Neither output is connected to the website.
 """
 import json
@@ -320,6 +321,22 @@ exit_frames.free()
 exit_mesh.materials.append(concrete)
 exit_object = bpy.data.objects.new('Exit frames', exit_mesh)
 bpy.context.collection.objects.link(exit_object)
+
+# Project by face direction so horizontal treads and vertical risers keep a consistent texture scale.
+for obj in (bowl, step_object, exit_object):
+    mesh = obj.data
+    mesh.update()
+    uv = mesh.uv_layers.new(name='UVMap')
+    for polygon in mesh.polygons:
+        normal = polygon.normal
+        for loop_index in polygon.loop_indices:
+            point = mesh.vertices[mesh.loops[loop_index].vertex_index].co
+            if abs(normal.z) > 0.7:
+                uv.data[loop_index].uv = (point.x / 10, point.y / 4)
+            elif abs(normal.x) > abs(normal.y):
+                uv.data[loop_index].uv = (point.y / 10, point.z / 4)
+            else:
+                uv.data[loop_index].uv = (point.x / 10, point.z / 4)
 
 seat_collection = bpy.data.collections.new('Seats')
 bpy.context.scene.collection.children.link(seat_collection)
