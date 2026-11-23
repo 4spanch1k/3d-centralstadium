@@ -1630,6 +1630,10 @@ for (const name of ['pointerdown', 'pointermove', 'pointerup', 'wheel', 'keydown
   window.addEventListener(name, markDirty, { passive: true, capture: true });
 }
 controls.addEventListener('change', markDirty);
+// Вкладка, открытая в фоне и показанная позже, перерисовывается сразу, без движения мыши.
+document.addEventListener('visibilitychange', () => { if (!document.hidden) markDirty(); });
+window.addEventListener('focus', markDirty);
+window.addEventListener('pageshow', markDirty);
 THREE.DefaultLoadingManager.onProgress = (url, loaded, total) => {
   if (loadingNote && total) loadingNote.textContent = `Загрузка модели… ${Math.round(loaded / total * 100)}%`;
   markDirty();
