@@ -2,7 +2,7 @@
 
 The field keeps its original dimensions. Only the bowl footprint and seat
 positions are scaled to 227 x 175 m; seat meshes and heights are not scaled.
-The intermediate landing and aisle rails follow the existing site geometry.
+The intermediate landing, aisle steps and rails follow the existing site geometry.
 Seat directions follow the neighboring exported seats after scaling.
 Seat identifiers are copied from work/exports/seats.json, produced by
 window.__debug.exportSeats() on the development server. The number of rows and
@@ -90,6 +90,7 @@ bpy.context.collection.objects.link(bowl)
 
 # Match the eight aisle centers to the same fractions of each unscaled row path.
 aisles = [[] for _ in range(8)]
+steps = bmesh.new()
 for row in range(34):
     step = row * 0.72 + (2 if row >= 15 else 0)
     row_path = outline(71 + step, 53 + step, 29 + step, segments=64)
@@ -105,7 +106,27 @@ for row in range(34):
         fraction = (target - lengths[segment]) / (lengths[segment + 1] - lengths[segment])
         start, end = Vector(row_path[segment]), Vector(row_path[segment + 1])
         point = start.lerp(end, fraction)
-        points.append(Vector((point.x, point.y, 0.45 + row * 0.37 + 0.35)))
+        top = 0.45 + row * 0.37
+        points.append(Vector((point.x, point.y, top + 0.35)))
+        tangent = (end - start).normalized()
+        outward = Vector((point.x / scale_x, point.y / scale_z)).normalized()
+        center = Vector((point.x + outward.x * 0.24 * scale_x,
+                         point.y + outward.y * 0.24 * scale_z, top + 0.02))
+        unscaled_tangent = Vector((tangent.x / scale_x, tangent.y / scale_z)).normalized()
+        unscaled_normal = Vector((-unscaled_tangent.y, unscaled_tangent.x))
+        width = lengths[-1] * 4 / 800 * 0.85 * math.hypot(unscaled_tangent.x * scale_x, unscaled_tangent.y * scale_z)
+        depth = 0.68 * math.hypot(unscaled_normal.x * scale_x, unscaled_normal.y * scale_z)
+        transform = (Matrix.Translation(center)
+                     @ Matrix.Rotation(math.atan2(tangent.y, tangent.x), 4, 'Z')
+                     @ Matrix.Diagonal((width, depth, 0.04, 1)))
+        corners = bmesh.ops.create_cube(steps, size=1)['verts']
+        bmesh.ops.transform(steps, matrix=transform, verts=corners)
+step_mesh = bpy.data.meshes.new('Aisle steps')
+steps.to_mesh(step_mesh)
+steps.free()
+step_mesh.materials.append(concrete)
+step_object = bpy.data.objects.new('Aisle steps', step_mesh)
+bpy.context.collection.objects.link(step_object)
 
 steel = bpy.data.materials.new('Aisle rail steel')
 steel.diffuse_color = (0.48, 0.52, 0.52, 1)
