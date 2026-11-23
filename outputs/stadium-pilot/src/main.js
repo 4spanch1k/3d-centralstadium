@@ -133,14 +133,28 @@ const concreteExtras = lowPower ? {} : { normalMap: concreteMap(asset('concrete-
 const concrete = new THREE.MeshStandardMaterial({ color: '#d6d9d3', map: concreteTexture, roughness: 1, ...concreteExtras });
 const darkConcrete = new THREE.MeshStandardMaterial({ color: '#bcc2bc', map: concreteTexture, roughness: 1, ...concreteExtras });
 // Выцветание и разводы бетона: шум по мировым координатам, без отдельных текстур.
-function weather(surface) {
+// Запечённое затенение (Blender Cycles, вид сверху): карта по мировым координатам (x, z). Применяется к бетону, дорожкам, газону и земле.
+// Карта покрывает x in [-112, 112], z in [-96, 96]; на телефонах версия вдвое меньше.
+const aoTexture = textureLoader.load(asset(lowPower ? 'ao-top-2k.webp' : 'ao-top.webp'), undefined, undefined, () => {});
+aoTexture.colorSpace = THREE.SRGBColorSpace;
+aoTexture.anisotropy = 4;
+const aoUniforms = {
+  uAoMap: { value: aoTexture },
+  uAoRect: { value: new THREE.Vector4(-112, -96, 224, 192) },
+  uAoStrength: { value: 0.6 },
+};
+function weather(surface, { stains = true } = {}) {
   surface.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, aoUniforms);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vWeatherPos;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWeatherPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
 varying vec3 vWeatherPos;
+uniform sampler2D uAoMap;
+uniform vec4 uAoRect;
+uniform float uAoStrength;
 float wHash(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
 float wNoise(vec3 p) {
   vec3 i = floor(p); vec3 f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -148,22 +162,27 @@ float wNoise(vec3 p) {
              mix(mix(wHash(i + vec3(0,0,1)), wHash(i + vec3(1,0,1)), f.x), mix(wHash(i + vec3(0,1,1)), wHash(i + vec3(1,1,1)), f.x), f.y), f.z);
 }`)
       .replace('#include <color_fragment>', `#include <color_fragment>
-${lowPower
+${!stains ? '' : lowPower
   ? 'float stain = wNoise(vWeatherPos * 0.35) * 0.7 + wNoise(vWeatherPos * 1.7) * 0.3;\ndiffuseColor.rgb *= mix(0.72, 1.08, stain);'
   : `float stain = wNoise(vWeatherPos * 0.35) * 0.6 + wNoise(vWeatherPos * 1.7) * 0.3 + wNoise(vWeatherPos * 7.0) * 0.1;
 diffuseColor.rgb *= mix(0.72, 1.08, stain);
-diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.86, 0.9, 0.84), smoothstep(0.55, 0.8, wNoise(vWeatherPos * 0.9)));`}`);
+diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.86, 0.9, 0.84), smoothstep(0.55, 0.8, wNoise(vWeatherPos * 0.9)));`}
+vec2 aoUv = vec2((vWeatherPos.x - uAoRect.x) / uAoRect.z, 1.0 - (vWeatherPos.z - uAoRect.y) / uAoRect.w);
+float bakedAo = texture2D(uAoMap, aoUv).r;
+diffuseColor.rgb *= mix(1.0, bakedAo, uAoStrength);`);
   };
   surface.needsUpdate = true;
 }
 weather(concrete);
 weather(darkConcrete);
+weather(grass, { stains: false });
 const trackNormal = new THREE.TextureLoader().load(asset('track-normal.jpg'), undefined, undefined, (error) => console.error('Не удалось загрузить фактуру дорожек', error));
 trackNormal.wrapS = THREE.RepeatWrapping;
 trackNormal.wrapT = THREE.RepeatWrapping;
 trackNormal.repeat.set(0.5, 0.5);
 trackNormal.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
 const track = new THREE.MeshStandardMaterial({ color: '#405a70', roughness: 0.95, normalMap: trackNormal, normalScale: new THREE.Vector2(0.5, 0.5) });
+weather(track, { stains: false });
 const white = material('#e8ead9');
 const yellowSeats = material('#e0a617', 0.5);
 const blueSeats = material('#1f5fa8', 0.5);
