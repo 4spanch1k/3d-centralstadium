@@ -1910,3 +1910,16 @@ window.addEventListener('keydown', (event) => {
 for (const [id, move] of [['#seat-prev', [0, -1]], ['#seat-next', [0, 1]]]) {
   document.querySelector(id)?.addEventListener('click', () => goToNeighbor(...move));
 }
+
+// Главный фасад: собственная модель по фотографии-ориентиру (work/blender/create_west_facade.py), стоит снаружи западной трибуны.
+modelLoader.load(asset('west-facade.glb'), (model) => {
+  model.scene.traverse((object) => {
+    if (object.isMesh) {
+      object.castShadow = true;
+      object.receiveShadow = true;
+    }
+  });
+  scene.add(model.scene);
+  renderer.shadowMap.needsUpdate = true;
+  markDirty();
+}, undefined, (error) => console.error('Не удалось загрузить фасад:', error));
