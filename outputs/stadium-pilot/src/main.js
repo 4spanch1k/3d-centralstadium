@@ -24,13 +24,16 @@ try {
 }
 // Телефоны и планшеты: меньше разрешение, без тяжёлых эффектов.
 const lowPower = window.matchMedia('(pointer: coarse)').matches;
-let pixelRatio = Math.min(window.devicePixelRatio, lowPower ? 1.25 : 1.5);
+// Режим максимального качества (по умолчанию на компьютерах): родное разрешение экрана, постоянное затенение, мягкие тени.
+// ?quality=fast возвращает прежний экономный режим.
+const qualityMax = !lowPower && new URLSearchParams(location.search).get('quality') !== 'fast';
+let pixelRatio = Math.min(window.devicePixelRatio, lowPower ? 1.25 : qualityMax ? 2 : 1.5);
 renderer.setPixelRatio(pixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.setClearColor('#a7c0c3', 1);
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFShadowMap;
+renderer.shadowMap.type = qualityMax ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
 renderer.shadowMap.autoUpdate = false;
 renderer.shadowMap.needsUpdate = true;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -99,7 +102,7 @@ scene.add(hemisphere);
 const sun = new THREE.DirectionalLight('#fff0d0', 2.6);
 sun.position.set(-85, 140, -70);
 sun.castShadow = true;
-const shadowSize = lowPower ? 2048 : 4096;
+const shadowSize = lowPower ? 2048 : qualityMax ? Math.min(8192, renderer.capabilities.maxTextureSize) : 4096;
 sun.shadow.mapSize.set(shadowSize, shadowSize);
 sun.shadow.radius = 2.5;
 sun.shadow.camera.left = -135;
@@ -631,8 +634,8 @@ seatHits.visible = false;
 const supportGeometry = new THREE.BoxGeometry(0.09, 0.25, 0.12);
 supportGeometry.translate(0, -0.15, 0.08);
 // Детальные кресла вблизи: отдельные небольшие меши только для нужных мест (сектор или окрестность кресла).
-const detailCapacity = lowPower ? 3200 : 7000;
-const detailRadius = lowPower ? 28 : 48;
+const detailCapacity = lowPower ? 3200 : qualityMax ? 14000 : 7000;
+const detailRadius = lowPower ? 28 : qualityMax ? 72 : 48;
 let detailSeatGeometry = seatGeometry;
 const detailMeshes = {
   yellow: new THREE.InstancedMesh(seatGeometry, yellowSeats, detailCapacity),
@@ -1736,7 +1739,7 @@ if (!lowPower && new URLSearchParams(location.search).get('fx') !== '0') {
     // Далёкий рельеф (слой 1) не участвует в расчёте затенения: на огромной дальности он давал чёрные пятна.
     aoCamera = new THREE.PerspectiveCamera();
     const ao = new GTAOPass(scene, aoCamera, window.innerWidth, window.innerHeight);
-    ao.updateGtaoMaterial({ radius: 0.9, distanceExponent: 1.4, thickness: 1.2, scale: 1.1, samples: 12 });
+    ao.updateGtaoMaterial({ radius: 0.9, distanceExponent: 1.4, thickness: 1.2, scale: 1.1, samples: qualityMax ? 16 : 12 });
     ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 8 });
     instance.addPass(ao);
     // Свечение ламп, светодиодных лент и табло: только вечером и только на компьютерах.
@@ -1752,7 +1755,7 @@ if (!lowPower && new URLSearchParams(location.search).get('fx') !== '0') {
 
 // Рендер по требованию: пока ничего не меняется, сцена не перерисовывается (экономит батарею и нагрев).
 const maxPixelRatio = pixelRatio;
-const minPixelRatio = lowPower ? 0.85 : 1.0;
+const minPixelRatio = lowPower ? 0.85 : qualityMax ? maxPixelRatio : 1.0;
 let pixelCeiling = maxPixelRatio;
 let lastActivity = performance.now() + 8000;
 let lastRender = 0;
@@ -1831,7 +1834,7 @@ renderer.setAnimationLoop(() => {
   }
   if (controls.enabled) controls.update();
   const showingPano = panoMode && view === 'seat';
-  const aoActive = composer && !showingPano && now >= aoPausedUntil && (stage === 'sector' || stage === 'confirm' || view === 'seat');
+  const aoActive = composer && !showingPano && now >= aoPausedUntil && (qualityMax || stage === 'sector' || stage === 'confirm' || view === 'seat');
   if (showingPano) renderer.render(panoScene, camera);
   else if (aoActive) {
     aoCamera.copy(camera, false);
@@ -1848,7 +1851,7 @@ renderer.setAnimationLoop(() => {
       const average = frameTotal / frameCount;
       frameTotal = 0;
       frameCount = 0;
-      if (aoActive && average > 21) {
+      if (aoActive && average > 21 && !qualityMax) {
         // Сначала жертвуем затенением, а не чёткостью: картинка остаётся резкой.
         aoStrikes += 1;
         if (aoStrikes >= 2) {
