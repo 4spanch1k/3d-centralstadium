@@ -846,18 +846,34 @@ function pickPlanSeat(ray) {
 sectorPlan.visible = false;
 sectorPlan.frustumCulled = false;
 scene.add(sectorPlan);
+// Подсветка сектора на плане (по поведению Halden Arena): выбранный сектор яркий с золотистым оттенком, остальные приглушены.
+const planColors = sectorPlan.instanceColor.array;
+const planBase = planColors.slice();
 let hoveredSector = null;
 function hoverSector(sector) {
   if (sector === hoveredSector) return;
-  const paint = (number, lighten) => {
-    const color = sectorColorOf(number);
-    if (lighten) color.lerp(new THREE.Color('#ffffff'), 0.5);
-    for (const index of sectorSeatIndices.get(number) || []) sectorPlan.setColorAt(index, color);
-  };
-  if (hoveredSector !== null) paint(hoveredSector, false);
   hoveredSector = sector;
-  if (sector !== null) paint(sector, true);
+  if (sector === null) planColors.set(planBase);
+  else {
+    for (let i = 0; i < planColors.length; i += 1) planColors[i] = planBase[i] * 0.38;
+    const gold = [1, 0.93, 0.72];
+    for (const index of sectorSeatIndices.get(sector) || []) {
+      const k = index * 3;
+      for (let c = 0; c < 3; c += 1) planColors[k + c] = planBase[k + c] * 0.5 + gold[c] * 0.5;
+    }
+  }
   sectorPlan.instanceColor.needsUpdate = true;
+}
+// Сброс подсветки через 260 мс после ухода курсора: на границах секторов и между плитками не мигает.
+let hoverClearTimer = 0;
+function planHover(sector) {
+  if (sector !== null) {
+    clearTimeout(hoverClearTimer);
+    hoverClearTimer = 0;
+    hoverSector(sector);
+  } else if (!hoverClearTimer && hoveredSector !== null) {
+    hoverClearTimer = setTimeout(() => { hoverClearTimer = 0; hoverSector(null); markDirty(); }, 260);
+  }
 }
 // Таблички с номерами секторов над верхним рядом каждого сектора (положение ориентировочное).
 {
@@ -1181,7 +1197,7 @@ let lastX = 0;
 let lastY = 0;
 let cameraTransition;
 let firstView = true;
-function moveCamera(position, target, fov, orbit, instant = false, time = 850) {
+function moveCamera(position, target, fov, orbit, instant = false, time = 1100) {
   const destination = camera.clone();
   destination.position.copy(position);
   destination.lookAt(target);
@@ -1308,6 +1324,18 @@ function clearMarker() {
   seatMarker.visible = false;
 }
 // Режимы показа мест: none (общий вид, простые кресла), sector (только места сектора, детально), near (вид с места: рядом детально).
+// Подсветка ряда под курсором в секторе (по поведению Halden Arena): ряд ярче, остальные приглушены примерно до 55%.
+const rowBase = new THREE.Color(1, 1, 1);
+const rowBright = new THREE.Color(1.3, 1.22, 1.0);
+const rowDim = new THREE.Color(0.55, 0.55, 0.55);
+let hoveredRow = null;
+function hoverRow(seat) {
+  const row = seat ? seat.row : null;
+  if (row === hoveredRow) return;
+  hoveredRow = row;
+  for (const placed of sectorRefs) detailMeshes[placed.group].setColorAt(placed.detailIndex, row === null ? rowBase : placed.row === row ? rowBright : rowDim);
+  for (const mesh of Object.values(detailMeshes)) if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+}
 function applyDetail(mode, origin) {
   const picked = [];
   if (mode === 'sector') {
@@ -1325,6 +1353,7 @@ function applyDetail(mode, origin) {
   sectorRefs.length = 0;
   for (const seat of picked) {
     if (counts[seat.group] >= detailCapacity) continue;
+    seat.detailIndex = counts[seat.group];
     detailMeshes[seat.group].setMatrixAt(counts[seat.group]++, seat.matrix);
     detailLegs.setMatrixAt(legs++, seat.matrix);
     sectorHits.setMatrixAt(sectorRefs.length, seat.matrix);
@@ -1344,6 +1373,8 @@ function applyDetail(mode, origin) {
   }
   detailLegs.count = legs;
   detailLegs.instanceMatrix.needsUpdate = true;
+  hoveredRow = undefined;
+  hoverRow(null);
   sectorHits.count = sectorRefs.length;
   sectorHits.instanceMatrix.needsUpdate = true;
   if (sectorRefs.length) sectorHits.computeBoundingSphere();
@@ -1381,8 +1412,8 @@ function renderStage() {
     chip.setAttribute('aria-label', `${standNames[stand]}, сектор ${number}`);
     if (plan) chip.style.borderBottom = `4px solid ${sectorColors[number % sectorColors.length]}`;
     chip.addEventListener('click', () => pickSector(stand, number));
-    chip.addEventListener('pointerenter', () => { if (plan) hoverSector(number); });
-    chip.addEventListener('pointerleave', () => { if (plan) hoverSector(null); });
+    chip.addEventListener('pointerenter', () => { if (plan) planHover(number); });
+    chip.addEventListener('pointerleave', () => { if (plan) planHover(null); });
     return chip;
   };
   if (plan) {
@@ -1697,6 +1728,16 @@ canvas.addEventListener('pointerup', (event) => {
       }
       if (!seat || best > 36) return;
     }
+    // На сенсорном экране первое касание подсвечивает сектор и показывает подпись, второе открывает его.
+    if (event.pointerType === 'touch' && bookingOpen && hoveredSector !== seat.sector) {
+      planHover(seat.sector);
+      seatTip.textContent = `${standNames[seat.stand]} · сектор ${seat.sector} · ${(sectorSeatIndices.get(seat.sector) || []).length} мест`;
+      seatTip.style.left = `${Math.min(window.innerWidth - 150, Math.max(10, event.clientX - 70))}px`;
+      seatTip.style.top = `${Math.max(70, event.clientY - 54)}px`;
+      seatTip.hidden = false;
+      return;
+    }
+    seatTip.hidden = true;
     pickSector(seat.stand, seat.sector);
     return;
   }
@@ -1729,7 +1770,8 @@ canvas.addEventListener('pointermove', (event) => {
   const plan = sectorPlan.visible;
   if (dragging || cameraTransition || !bookingOpen || view === 'seat' || (stage === 'stand' && !plan) || event.pointerType === 'touch') {
     if (!seatTip.hidden) { seatTip.hidden = true; canvas.style.cursor = ''; }
-    hoverSector(null);
+    planHover(null);
+    hoverRow(null);
     return;
   }
   const now = performance.now();
@@ -1747,11 +1789,11 @@ canvas.addEventListener('pointermove', (event) => {
   if (!seat || seat.hidden) {
     seatTip.hidden = true;
     canvas.style.cursor = '';
-    if (plan) { hoverSector(null); markDirty(); }
+    if (plan) { planHover(null); markDirty(); } else hoverRow(null);
     return;
   }
-  if (plan) { hoverSector(seat.sector); markDirty(); }
-  seatTip.textContent = plan ? `${standNames[seat.stand]} · сектор ${seat.sector}` : `Ряд ${seat.row} · место ${seat.number}`;
+  if (plan) { planHover(seat.sector); markDirty(); } else { hoverRow(seat); markDirty(); }
+  seatTip.textContent = plan ? `${standNames[seat.stand]} · сектор ${seat.sector} · ${(sectorSeatIndices.get(seat.sector) || []).length} мест` : `Ряд ${seat.row} · место ${seat.number}`;
   seatTip.style.left = `${event.clientX + 14}px`;
   seatTip.style.top = `${event.clientY + 14}px`;
   seatTip.hidden = false;
@@ -1955,7 +1997,8 @@ renderer.setAnimationLoop(() => {
   if (cameraTransition) {
     const transition = cameraTransition;
     const progress = transition.duration ? Math.min((now - transition.start) / transition.duration, 1) : 1;
-    const ease = progress * progress * (3 - 2 * progress);
+    // Кубическая ease in-out (как в облётах Halden Arena): плавный старт и мягкая остановка.
+    const ease = progress < 0.5 ? 4 * progress * progress * progress : 1 - Math.pow(-2 * progress + 2, 3) / 2;
     camera.position.lerpVectors(transition.fromPosition, transition.toPosition, ease);
     camera.quaternion.slerpQuaternions(transition.fromRotation, transition.toRotation, ease);
     camera.fov = THREE.MathUtils.lerp(transition.fromFov, transition.toFov, ease);
