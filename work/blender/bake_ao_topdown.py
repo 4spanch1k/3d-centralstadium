@@ -5,7 +5,10 @@
 дорожки и землю по мировым координатам (x, z) без нагрузки на видеокарту.
 
 Запуск: Blender -b -P bake_ao_topdown.py -- --glb ../exports/stadium-scene.glb --out ../exports/ao-top.png [--px 4096] [--samples 192]
-Карта покрывает x in [-112, 112], z in [-96, 96] (Three.js). Пиксель (u, v от верха) -> x = -112 + u*224, z = -96 + v*192.
+Для отдельной сцены Blender вместо --glb можно указать --blend, а для крыши
+и мачт добавить по одному --extra-glb с путём к модели.
+По умолчанию карта покрывает x in [-112, 112], z in [-96, 96] (Three.js).
+Для увеличенной чаши используйте --bounds -125 125 -105 105 и обновите uAoRect в приложении вместе с картой.
 Всё, что выше 5,5 м (крыша, мачты, кроны, кресла верхних ярусов, таблички), НЕ видно в кадре, но затеняет нижние поверхности.
 """
 import bpy, sys, os, time, math
@@ -14,14 +17,30 @@ from mathutils import Vector
 argv = sys.argv[sys.argv.index('--') + 1:]
 def arg(name, default=None):
     return argv[argv.index(name) + 1] if name in argv else default
-glb = os.path.abspath(arg('--glb')); out = os.path.abspath(arg('--out'))
+glb = arg('--glb')
+blend = arg('--blend')
+if bool(glb) == bool(blend):
+    raise ValueError('Specify exactly one of --glb or --blend')
+out = os.path.abspath(arg('--out'))
 px = int(arg('--px', 4096)); samples = int(arg('--samples', 192))
-X0, X1, Z0, Z1 = -112.0, 112.0, -96.0, 96.0
+if '--bounds' in argv:
+    index = argv.index('--bounds')
+    X0, X1, Z0, Z1 = map(float, argv[index + 1:index + 5])
+    if X0 >= X1 or Z0 >= Z1:
+        raise ValueError('Bounds must have increasing X and Z limits')
+else:
+    X0, X1, Z0, Z1 = -112.0, 112.0, -96.0, 96.0
 HIDE_ABOVE = 5.5
 
-bpy.ops.wm.read_factory_settings(use_empty=True)
 t0 = time.time()
-bpy.ops.import_scene.gltf(filepath=glb)
+if blend:
+    bpy.ops.wm.open_mainfile(filepath=os.path.abspath(blend))
+else:
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    bpy.ops.import_scene.gltf(filepath=os.path.abspath(glb))
+for index, value in enumerate(argv):
+    if value == '--extra-glb':
+        bpy.ops.import_scene.gltf(filepath=os.path.abspath(argv[index + 1]))
 scene = bpy.context.scene
 bpy.context.view_layer.update()
 
