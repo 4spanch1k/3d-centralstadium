@@ -195,15 +195,16 @@ if (uLightAmount > 0.0) {
       .replace('#include <color_fragment>', `#include <color_fragment>
 ${!stains ? '' : lowPower
   ? 'float stain = wNoise(vWeatherPos * 0.35) * 0.7 + wNoise(vWeatherPos * 1.7) * 0.3;\ndiffuseColor.rgb *= mix(0.72, 1.08, stain);'
-  : `float stain;
-if (length(vViewPosition) > 140.0) {
-  // Издали мелкие разводы не видны: один отсчёт шума вместо пяти.
-  stain = wNoise(vWeatherPos * 0.35);
-  diffuseColor.rgb *= mix(0.72, 1.08, stain);
-} else {
-  stain = wNoise(vWeatherPos * 0.35) * 0.6 + wNoise(vWeatherPos * 1.7) * 0.3 + wNoise(vWeatherPos * 7.0) * 0.1;
-  diffuseColor.rgb *= mix(0.72, 1.08, stain);
-  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.86, 0.9, 0.84), smoothstep(0.55, 0.8, wNoise(vWeatherPos * 0.9)));
+  : `float stain = wNoise(vWeatherPos * 0.35);
+// Издали мелкие разводы плавно уходят (без резкой границы): один отсчёт шума вместо пяти.
+float stainFar = smoothstep(110.0, 170.0, length(vViewPosition));
+vec3 stainBase = diffuseColor.rgb;
+diffuseColor.rgb *= mix(0.72, 1.08, stain);
+if (stainFar < 1.0) {
+  float stainFull = stain * 0.6 + wNoise(vWeatherPos * 1.7) * 0.3 + wNoise(vWeatherPos * 7.0) * 0.1;
+  vec3 stainColor = stainBase * mix(0.72, 1.08, stainFull);
+  stainColor = mix(stainColor, stainColor * vec3(0.86, 0.9, 0.84), smoothstep(0.55, 0.8, wNoise(vWeatherPos * 0.9)));
+  diffuseColor.rgb = mix(stainColor, diffuseColor.rgb, stainFar);
 }`}
 vec2 aoUv = vec2((vWeatherPos.x - uAoRect.x) / uAoRect.z, 1.0 - (vWeatherPos.z - uAoRect.y) / uAoRect.w);
 float bakedAo = texture2D(uAoMap, aoUv).r;
@@ -1942,13 +1943,8 @@ renderer.setAnimationLoop(() => {
   if (gap < (active ? 15 : 50)) return;
   lastRender = now;
   // Смена разрешения очищает холст, поэтому применяется в начале кадра, прямо перед отрисовкой: иначе мелькает пустой кадр.
-  // На общем виде и плане детали мелкие: разрешение ограничено 1,0, при возврате к месту поднимается обратно.
-  const viewCap = view === 'overview' && !qualityMax ? Math.min(maxPixelRatio, 1.0) : maxPixelRatio;
-  if (viewCap !== lastViewCap) {
-    lastViewCap = viewCap;
-    pendingPixelRatio = Math.min(viewCap, pixelCeiling);
-    pixelRatio = pendingPixelRatio;
-  }
+  // Разрешение при переходах между видами не меняется: смена размера холста давала мигание текстур.
+  const viewCap = maxPixelRatio;
   if (pendingPixelRatio !== null) {
     applyPixelRatio(pendingPixelRatio);
     pendingPixelRatio = null;
