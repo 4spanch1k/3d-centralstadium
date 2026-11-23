@@ -82,7 +82,7 @@ const horizonMesh = new THREE.Mesh(horizonGeometry, new THREE.MeshBasicMaterial(
 horizonMesh.layers.set(1);
 scene.add(horizonMesh);
 
-new HDRLoader().load(asset('sky.hdr'), (texture) => {
+new HDRLoader().load(asset(qualityMax ? 'sky-2k.hdr' : 'sky.hdr'), (texture) => {
   texture.mapping = THREE.EquirectangularReflectionMapping;
   scene.background = texture;
   scene.environment = texture;
