@@ -24,9 +24,9 @@ try {
 }
 // Телефоны и планшеты: меньше разрешение, без тяжёлых эффектов.
 const lowPower = window.matchMedia('(pointer: coarse)').matches;
-// Режим максимального качества (по умолчанию на компьютерах): родное разрешение экрана, постоянное затенение, мягкие тени.
-// ?quality=fast возвращает прежний экономный режим.
-const qualityMax = !lowPower && new URLSearchParams(location.search).get('quality') !== 'fast';
+// Режим максимального качества (только ?quality=max, для съёмки и показа на мощном компьютере): родное разрешение экрана,
+// постоянное затенение, мягкие тени, глянцевый пластик. По умолчанию включён плавный режим с адаптивным разрешением.
+const qualityMax = !lowPower && new URLSearchParams(location.search).get('quality') === 'max';
 let pixelRatio = Math.min(window.devicePixelRatio, lowPower ? 1.25 : qualityMax ? 2 : 1.5);
 renderer.setPixelRatio(pixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -82,7 +82,7 @@ const horizonMesh = new THREE.Mesh(horizonGeometry, new THREE.MeshBasicMaterial(
 horizonMesh.layers.set(1);
 scene.add(horizonMesh);
 
-new HDRLoader().load(asset(qualityMax ? 'sky-2k.hdr' : 'sky.hdr'), (texture) => {
+new HDRLoader().load(asset(lowPower ? 'sky.hdr' : 'sky-2k.hdr'), (texture) => {
   texture.mapping = THREE.EquirectangularReflectionMapping;
   scene.background = texture;
   scene.environment = texture;
