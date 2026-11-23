@@ -3,7 +3,7 @@
 The field keeps its original dimensions. Only the bowl footprint and seat
 positions are scaled to 227 x 175 m; seat meshes and heights are not scaled.
 The intermediate landing, front barrier, aisle steps, rails and exits follow the existing site geometry.
-The preview includes a field, goals, running track, west roof, east masts and west facade.
+The preview includes a field, goals, track, west roof, east masts, west facade and Alatau terrain.
 It also includes a camera and light for rendering the assembled model.
 Seat directions follow the row tangent after scaling, including across gaps.
 Seat identifiers are copied from work/exports/seats.json, produced by
@@ -83,8 +83,8 @@ ground_material = bpy.data.materials.new('Ground')
 ground_material.use_nodes = True
 ground_material.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value = (0.3, 0.33, 0.29, 1)
 ground_mesh = bpy.data.meshes.new('Ground')
-ground_mesh.from_pydata([(-125, -105, -0.2), (125, -105, -0.2),
-                         (125, 105, -0.2), (-125, 105, -0.2)], [], [(0, 1, 2, 3)])
+ground_mesh.from_pydata([(-6500, -6500, -0.2), (6500, -6500, -0.2),
+                         (6500, 6500, -0.2), (-6500, 6500, -0.2)], [], [(0, 1, 2, 3)])
 ground_mesh.materials.append(ground_material)
 bpy.context.collection.objects.link(bpy.data.objects.new('Ground', ground_mesh))
 
@@ -353,12 +353,18 @@ for stand, sector, row, number, x, y, z in seats:
     seat['stand'], seat['sector'], seat['row'], seat['number'] = stand, sector, row, number
     seat_collection.objects.link(seat)
 
-for asset_name in ('stadium-roof.glb', 'floodlight-masts.glb', 'west-facade.glb'):
+for asset_name in ('stadium-roof.glb', 'floodlight-masts.glb', 'west-facade.glb', 'alatau-terrain.glb'):
     bpy.ops.import_scene.gltf(filepath=str(root / 'outputs/stadium-pilot/public' / asset_name))
 
 scene = bpy.context.scene
 scene.world = bpy.data.worlds.new('Preview sky')
-scene.world.color = (0.3, 0.3, 0.3)
+scene.world.use_nodes = True
+sky = scene.world.node_tree.nodes.new('ShaderNodeTexEnvironment')
+sky.image = bpy.data.images.load(str(root / 'outputs/stadium-pilot/public/sky.hdr'))
+sky.image.pack()
+background = scene.world.node_tree.nodes['Background']
+background.inputs['Strength'].default_value = 0.45
+scene.world.node_tree.links.new(sky.outputs['Color'], background.inputs['Color'])
 bpy.ops.object.light_add(type='SUN', location=(0, 0, 80))
 bpy.context.object.name = 'Preview sun'
 bpy.context.object.rotation_euler = (0.45, -0.35, -0.45)
@@ -369,6 +375,7 @@ camera.name = 'Preview camera'
 camera.rotation_euler = (Vector((0, 0, 2)) - camera.location).to_track_quat('-Z', 'Y').to_euler()
 camera.data.type = 'ORTHO'
 camera.data.ortho_scale = 330
+camera.data.clip_end = 7500
 scene.camera = camera
 scene.render.engine = 'CYCLES'
 scene.cycles.samples = 32
