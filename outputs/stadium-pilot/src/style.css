@@ -89,7 +89,9 @@ button { cursor: pointer; }
 .chips { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
 .chip { height: 46px; border: 1px solid var(--line); border-radius: 14px; background: #fff; font-size: 14px; font-weight: 500; transition: border-color .15s, background .15s; }
 .chip:hover { border-color: var(--accent); background: var(--gold-soft); }
-.chip.active { border-color: var(--accent); background: var(--accent); color: #fff; }
+.chip-group { grid-column: 1 / -1; margin: 6px 0 0; font-size: 12px; font-weight: 600; color: var(--muted); }
+.chip-group:first-child { margin-top: 0; }
+.chip.active {border-color: var(--accent); background: var(--accent); color: #fff; }
 
 .primary-action, .secondary-action { width: 100%; min-height: 50px; padding: 0 18px; border-radius: 999px; font-size: 14px; font-weight: 600; transition: background .15s, border-color .15s; }
 .primary-action { border: 0; background: var(--accent); color: #fff; }

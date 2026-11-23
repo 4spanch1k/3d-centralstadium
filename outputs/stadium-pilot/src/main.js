@@ -744,6 +744,40 @@ for (const [mesh, data] of [[yellow, yellowData], [blue, blueData], [green, gree
     if (seat.hidden) mesh.setMatrixAt(index, hiddenMatrix);
   });
 }
+// Цветной план секторов для общего вида: плоские плитки над местами (одна на кресло), цвет по номеру сектора.
+// Видна только на первом шаге выбора; номер и трибуна показываются при наведении, в списке секторов и на табличках.
+const sectorColors = ['#e8553d', '#f0a81c', '#47b05e', '#2f8fe0', '#9b59b6', '#17a8a1', '#e86a9f', '#8a9a2b'];
+const sectorColorOf = (sector) => new THREE.Color(sectorColors[sector % sectorColors.length]);
+// Плитки наклонены вдоль ската трибуны (ряд поднимается на 0,37 м на 0,72 м), чтобы покрывать места и при взгляде под малым углом.
+const planGeometry = new THREE.PlaneGeometry(0.47, 0.9);
+planGeometry.rotateX(-Math.PI / 2);
+planGeometry.rotateX(-Math.atan2(0.37, 0.72));
+planGeometry.translate(0, 0.5, 0.0);
+const sectorPlan = new THREE.InstancedMesh(planGeometry, new THREE.MeshBasicMaterial({ toneMapped: false, side: THREE.DoubleSide }), seats.length);
+const sectorSeatIndices = new Map();
+seats.forEach((seat, index) => {
+  sectorPlan.setMatrixAt(index, seat.hidden ? hiddenMatrix : seat.matrix);
+  sectorPlan.setColorAt(index, sectorColorOf(seat.sector));
+  if (seat.hidden) return;
+  if (!sectorSeatIndices.has(seat.sector)) sectorSeatIndices.set(seat.sector, []);
+  sectorSeatIndices.get(seat.sector).push(index);
+});
+sectorPlan.visible = false;
+sectorPlan.frustumCulled = false;
+scene.add(sectorPlan);
+let hoveredSector = null;
+function hoverSector(sector) {
+  if (sector === hoveredSector) return;
+  const paint = (number, lighten) => {
+    const color = sectorColorOf(number);
+    if (lighten) color.lerp(new THREE.Color('#ffffff'), 0.5);
+    for (const index of sectorSeatIndices.get(number) || []) sectorPlan.setColorAt(index, color);
+  };
+  if (hoveredSector !== null) paint(hoveredSector, false);
+  hoveredSector = sector;
+  if (sector !== null) paint(sector, true);
+  sectorPlan.instanceColor.needsUpdate = true;
+}
 // Таблички с номерами секторов над верхним рядом каждого сектора (положение ориентировочное).
 {
   const topBySector = new Map();
@@ -1030,19 +1064,25 @@ function lookFromSeat() {
   const direction = new THREE.Vector3(Math.cos(pitch) * Math.cos(yaw), Math.sin(pitch), Math.cos(pitch) * Math.sin(yaw));
   camera.lookAt(camera.position.clone().add(direction));
 }
+// Цветной план секторов виден только на общем виде в начале выбора.
+function updatePlan() {
+  sectorPlan.visible = bookingOpen && view === 'overview' && stage === 'stand';
+  if (!sectorPlan.visible) hoverSector(null);
+}
 function setView(name) {
   view = name;
   stage = 'stand';
+  updatePlan();
   applyDetail('none');
   clearMarker();
   const selected = views[name];
   const target = name === 'overview' ? new THREE.Vector3(0, 4, 0) : new THREE.Vector3(...selected.target);
-  moveCamera(new THREE.Vector3(...selected.position), target, name === 'overview' ? 38 : 50, name === 'overview');
+  moveCamera(new THREE.Vector3(...selected.position), target, name === 'overview' ? (window.innerWidth <= 700 ? 66 : 38) : 50, name === 'overview');
   updateCameraFraming();
   updateSeatHighlights();
   document.querySelector('#app').classList.toggle('seat-mode', name !== 'overview');
   document.querySelector('#current-view').textContent = selected.label;
-  document.querySelector('#hint').textContent = name === 'overview' ? 'Выберите трибуну' : 'Нажмите на сектор';
+  document.querySelector('#hint').textContent = name === 'overview' ? (bookingOpen ? 'Нажмите на сектор' : 'Выберите трибуну') : 'Нажмите на сектор';
   document.querySelectorAll('.view-button').forEach((button) => {
     const active = button.dataset.view === name;
     button.classList.toggle('active', active);
@@ -1062,7 +1102,7 @@ function updateSeatHighlights() {
   const muted = new THREE.Color('#aaaaaa');
   for (const [mesh, data] of [[yellow, yellowData], [blue, blueData], [green, greenData]]) {
     data.forEach((seat, index) => {
-      const active = !bookingOpen || view === 'seat' || seat.stand === standSelect.value;
+      const active = !bookingOpen || view === 'seat' || view === 'overview' || seat.stand === standSelect.value;
       mesh.setColorAt(index, active ? selected : muted);
     });
     mesh.instanceColor.needsUpdate = true;
@@ -1166,29 +1206,54 @@ function renderStage() {
     item.classList.toggle('current', index === current);
   });
   const sector = Number(sectorSelect.value);
+  const plan = view === 'overview' && stage === 'stand';
   document.querySelector('#panel-title').textContent = stage === 'seat' ? 'Вид с места'
+    : plan ? 'Выберите сектор'
     : stage === 'stand' ? standNames[standSelect.value]
     : `${standNames[standSelect.value]} · сектор ${sector}`;
+  document.querySelector('#stand-copy').textContent = plan
+    ? 'Сектора отмечены цветами. Нажмите на сектор на стадионе или выберите его в списке.'
+    : 'Выберите сектор в списке или нажмите на него на трибуне.';
   document.querySelector('#stage-stand').hidden = stage !== 'stand';
   document.querySelector('#stage-sector').hidden = stage !== 'sector';
   document.querySelector('#stage-confirm').hidden = stage !== 'confirm';
   document.querySelector('#sector-copy').textContent = `Нажмите на место в секторе ${sector}. Остальные сектора скрыты.`;
   if (stage === 'confirm' && selectedSeat) document.querySelector('#confirm-place').textContent = currentPlace();
   const chips = document.querySelector('#sector-chips');
-  chips.replaceChildren(...standSectors[standSelect.value].map((number) => {
+  const makeChip = (number, stand) => {
     const chip = document.createElement('button');
     chip.type = 'button';
     chip.className = 'chip';
     chip.textContent = String(number);
-    chip.setAttribute('aria-label', `Сектор ${number}`);
-    chip.addEventListener('click', () => selectSector(number));
+    chip.setAttribute('aria-label', `${standNames[stand]}, сектор ${number}`);
+    if (plan) chip.style.borderBottom = `4px solid ${sectorColors[number % sectorColors.length]}`;
+    chip.addEventListener('click', () => pickSector(stand, number));
+    chip.addEventListener('pointerenter', () => { if (plan) hoverSector(number); });
+    chip.addEventListener('pointerleave', () => { if (plan) hoverSector(null); });
     return chip;
-  }));
+  };
+  if (plan) {
+    chips.replaceChildren(...Object.entries(standSectors).flatMap(([stand, numbers]) => {
+      const title = document.createElement('p');
+      title.className = 'chip-group';
+      title.textContent = standNames[stand];
+      return [title, ...numbers.map((number) => makeChip(number, stand))];
+    }));
+  } else {
+    chips.replaceChildren(...standSectors[standSelect.value].map((number) => makeChip(number, standSelect.value)));
+  }
   document.querySelector('#hint').textContent = { stand: 'Нажмите на сектор', sector: 'Нажмите на место', confirm: 'Подтвердите место в панели', seat: 'Перетащите, чтобы осмотреться' }[stage] || '';
 }
+// Выбор сектора с общего плана или из списка: открывает его трибуну и переходит к выбору места.
+function pickSector(stand, sector) {
+  openBooking(stand);
+  selectSector(sector);
+}
 function selectSector(sector) {
+  if (view === 'overview') setView(standSelect.value);
   updateSectorOptions(sector);
   stage = 'sector';
+  updatePlan();
   clearMarker();
   applyDetail('sector');
   showSector();
@@ -1319,6 +1384,7 @@ function showSeat() {
   if (!selectedSeat) return;
   view = 'seat';
   stage = 'seat';
+  updatePlan();
   clearMarker();
   updateSeatHighlights();
   const position = selectedSeat.position.clone().add(new THREE.Vector3(0, 1, 0));
@@ -1400,14 +1466,15 @@ document.querySelectorAll('.view-button').forEach((button) => button.addEventLis
   if (button.dataset.view === 'overview') setView('overview');
   else openBooking(button.dataset.view);
 }));
-document.querySelector('#open-booking').addEventListener('click', () => openBooking(standSelect.value));
+// «Выбрать место» открывает общий план с цветными секторами, а не случайную трибуну.
+document.querySelector('#open-booking').addEventListener('click', () => openBooking());
 document.querySelector('#close-booking').addEventListener('click', () => {
   bookingOpen = false;
   document.querySelector('#app').classList.remove('booking-open');
   document.querySelector('#booking-panel').hidden = true;
   setView('overview');
 });
-document.querySelector('#stand-view').addEventListener('click', () => setView(standSelect.value));
+document.querySelector('#stand-view').addEventListener('click', () => setView('overview'));
 document.querySelector('#seat-view').addEventListener('click', showSeat);
 document.querySelector('#seat-change').addEventListener('click', () => {
   stage = 'sector';
@@ -1462,13 +1529,23 @@ canvas.addEventListener('pointerup', (event) => {
   const raycaster = new THREE.Raycaster();
   raycaster.setFromCamera(pointer, camera);
   if (view === 'overview') {
-    const hit = raycaster.intersectObjects(standLevels)[0];
-    if (!hit) return;
-    const point = hit.point;
-    const stand = Math.abs(point.x) / 80 > Math.abs(point.z) / 62
-      ? (point.x > 0 ? 'north' : 'south')
-      : (point.z < 0 ? 'west' : 'east');
-    openBooking(stand);
+    // Сначала цветная плитка сектора; если попали между плитками (проход, граница, ступень), берём ближайшее кресло к точке попадания.
+    let seat = null;
+    const tile = raycaster.intersectObject(sectorPlan)[0];
+    if (tile) seat = seats[tile.instanceId];
+    if (!seat || seat.hidden) {
+      const hit = raycaster.intersectObjects(standLevels)[0];
+      if (!hit) return;
+      let best = Infinity;
+      seat = null;
+      for (const candidate of seats) {
+        if (candidate.hidden) continue;
+        const distance = candidate.position.distanceToSquared(hit.point);
+        if (distance < best) { best = distance; seat = candidate; }
+      }
+      if (!seat || best > 36) return;
+    }
+    pickSector(seat.stand, seat.sector);
     return;
   }
   if (!bookingOpen) return;
@@ -1497,24 +1574,28 @@ const hoverRaycaster = new THREE.Raycaster();
 const hoverPointer = new THREE.Vector2();
 let hoverFrame = 0;
 canvas.addEventListener('pointermove', (event) => {
-  if (dragging || cameraTransition || !bookingOpen || view === 'seat' || stage === 'stand' || event.pointerType === 'touch') {
+  const plan = sectorPlan.visible;
+  if (dragging || cameraTransition || !bookingOpen || view === 'seat' || (stage === 'stand' && !plan) || event.pointerType === 'touch') {
     if (!seatTip.hidden) { seatTip.hidden = true; canvas.style.cursor = ''; }
+    hoverSector(null);
     return;
   }
   const now = performance.now();
-  if (now - hoverFrame < 40) return;
+  if (now - hoverFrame < (plan ? 60 : 40)) return;
   hoverFrame = now;
   const bounds = canvas.getBoundingClientRect();
   hoverPointer.set((event.clientX - bounds.left) / bounds.width * 2 - 1, -(event.clientY - bounds.top) / bounds.height * 2 + 1);
   hoverRaycaster.setFromCamera(hoverPointer, camera);
-  const hit = hoverRaycaster.intersectObject(sectorHits)[0];
-  const seat = hit && sectorRefs[hit.instanceId];
+  const hit = hoverRaycaster.intersectObject(plan ? sectorPlan : sectorHits)[0];
+  const seat = hit && (plan ? seats : sectorRefs)[hit.instanceId];
   if (!seat || seat.hidden) {
     seatTip.hidden = true;
     canvas.style.cursor = '';
+    if (plan) { hoverSector(null); markDirty(); }
     return;
   }
-  seatTip.textContent = `Ряд ${seat.row} · место ${seat.number}`;
+  if (plan) { hoverSector(seat.sector); markDirty(); }
+  seatTip.textContent = plan ? `${standNames[seat.stand]} · сектор ${seat.sector}` : `Ряд ${seat.row} · место ${seat.number}`;
   seatTip.style.left = `${event.clientX + 14}px`;
   seatTip.style.top = `${event.clientY + 14}px`;
   seatTip.hidden = false;
