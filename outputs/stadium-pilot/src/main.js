@@ -908,6 +908,47 @@ for (const aisle of aisles) {
 const rails = new THREE.Mesh(mergeGeometries(railGeometries), new THREE.MeshStandardMaterial({ color: '#c9d1d3', metalness: 0.85, roughness: 0.3 }));
 rails.castShadow = true;
 scene.add(rails);
+// Номера рядов на ступенях у каждого прохода: один атлас и один меш (положение ориентировочное).
+{
+  const columns = 6;
+  const cell = 64;
+  const atlasRows = Math.ceil(rows / columns);
+  const numberCanvas = document.createElement('canvas');
+  numberCanvas.width = columns * cell;
+  numberCanvas.height = atlasRows * cell;
+  const numberContext = numberCanvas.getContext('2d');
+  numberContext.fillStyle = '#f4f1e2';
+  numberContext.font = '700 40px system-ui, sans-serif';
+  numberContext.textAlign = 'center';
+  numberContext.textBaseline = 'middle';
+  for (let row = 0; row < rows; row += 1) {
+    numberContext.fillText(String(row + 1), (row % columns) * cell + cell / 2, Math.floor(row / columns) * cell + cell / 2 + 2);
+  }
+  const numberTexture = new THREE.CanvasTexture(numberCanvas);
+  numberTexture.colorSpace = THREE.SRGBColorSpace;
+  numberTexture.anisotropy = 8;
+  const labelGeometries = [];
+  const labelMatrix = new THREE.Object3D();
+  aisles.forEach((aisle) => {
+    aisle.forEach((point, row) => {
+      const inward = new THREE.Vector3(-point.x, 0, -point.z).normalize();
+      const plane = new THREE.PlaneGeometry(0.3, 0.3);
+      const uv = plane.attributes.uv;
+      const column = row % columns;
+      const line = Math.floor(row / columns);
+      for (let i = 0; i < uv.count; i += 1) uv.setXY(i, (column + uv.getX(i)) / columns, 1 - (line + 1 - uv.getY(i)) / atlasRows);
+      labelMatrix.position.set(point.x + inward.x * 0.2, point.y - 0.5, point.z + inward.z * 0.2);
+      labelMatrix.lookAt(labelMatrix.position.x + inward.x, labelMatrix.position.y, labelMatrix.position.z + inward.z);
+      labelMatrix.updateMatrix();
+      plane.applyMatrix4(labelMatrix.matrix);
+      labelGeometries.push(plane);
+    });
+  });
+  const rowNumbers = new THREE.Mesh(mergeGeometries(labelGeometries), new THREE.MeshBasicMaterial({ map: numberTexture, transparent: true, alphaTest: 0.3, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+  rowNumbers.frustumCulled = false;
+  scene.add(rowNumbers);
+  labelGeometries.forEach((geometry) => geometry.dispose());
+}
 
 // Пропорции здания и навеса ориентировочные: измеренного чертежа пока нет.
 modelLoader.load(asset('west-building.glb'), (model) => {
