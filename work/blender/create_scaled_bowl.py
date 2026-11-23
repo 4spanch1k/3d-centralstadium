@@ -43,7 +43,7 @@ seat_mesh.materials.clear()
 seat_mesh.materials.append(seat_material)
 
 
-def outline(half_x, half_y, radius):
+def outline(half_x, half_y, radius, segments=12):
     corners = (
         ((half_x, half_y - radius), (half_x, half_y), (half_x - radius, half_y)),
         ((-half_x + radius, half_y), (-half_x, half_y), (-half_x, half_y - radius)),
@@ -52,8 +52,8 @@ def outline(half_x, half_y, radius):
     )
     points = []
     for start, control, end in corners:
-        for i in range(13):
-            t = i / 12
+        for i in range(segments + 1):
+            t = i / segments
             x = (1 - t) ** 2 * start[0] + 2 * (1 - t) * t * control[0] + t ** 2 * end[0]
             y = (1 - t) ** 2 * start[1] + 2 * (1 - t) * t * control[1] + t ** 2 * end[1]
             points.append((x * scale_x, y * scale_z))
@@ -92,8 +92,9 @@ bpy.context.collection.objects.link(bowl)
 aisles = [[] for _ in range(8)]
 for row in range(34):
     step = row * 0.72 + (2 if row >= 15 else 0)
-    row_path = outline(71 + step, 53 + step, 29 + step)
-    row_path = row_path[38:] + row_path[:39]
+    row_path = outline(71 + step, 53 + step, 29 + step, segments=64)
+    start = 3 * 65 - 1
+    row_path = row_path[start:] + row_path[:start + 1]
     lengths = [0.0]
     for start, end in zip(row_path, row_path[1:]):
         lengths.append(lengths[-1] + math.hypot((end[0] - start[0]) / scale_x,
