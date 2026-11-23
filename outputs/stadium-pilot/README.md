@@ -140,3 +140,5 @@ ffmpeg -i outputs/stadium-pilot/public/stadium-orbit-mobile.mp4 -an -c:v libvpx-
 HDR-небо в режиме качества (компьютеры): `sky-2k.hdr`, Poly Haven, Kloppenheim 05 Pure Sky 2k, CC0 — https://polyhaven.com/a/kloppenheim_05_puresky. На телефонах и в режиме `?quality=fast` остаётся лёгкий `sky.hdr` 1k.
 
 Фактура газона (нормали и шероховатость, компьютеры): ambientCG, Grass004, CC0 — https://ambientcg.com/view?id=Grass004. Исходники 1k лежат в `work/textures/grass004`.
+
+Вечерний свет: карта освещённости от четырёх прожекторов запечена в Blender Cycles (`work/blender/bake_floodlight_topdown.py`, вид сверху, те же границы, что у карты затенения) в `public/light-evening.webp`. Вечером она накладывается на бетон, дорожки, газон и землю по мировым координатам. Перезапекать вместе с картой затенения при изменении чаши, крыши или мачт: `Blender -b -P bake_floodlight_topdown.py -- --glb ../exports/stadium-scene.glb --out ../exports/light-top.png --px 2048 --samples 96 --power 1.2e6` (при необходимости `--bounds` и `--masts`).

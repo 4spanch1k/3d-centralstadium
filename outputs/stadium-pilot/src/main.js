@@ -156,8 +156,13 @@ const darkConcrete = new THREE.MeshStandardMaterial({ color: '#bcc2bc', map: con
 const aoTexture = textureLoader.load(asset(lowPower ? 'ao-top-2k.webp' : 'ao-top.webp'), undefined, undefined, () => {});
 aoTexture.colorSpace = THREE.SRGBColorSpace;
 aoTexture.anisotropy = 4;
+// Вечерний свет прожекторов, запечённый в Blender (work/blender/bake_floodlight_topdown.py), на той же области; 0 днём.
+const lightTexture = textureLoader.load(asset('light-evening.webp'), undefined, undefined, () => {});
+lightTexture.anisotropy = 4;
 const aoUniforms = {
   uAoMap: { value: aoTexture },
+  uLightMap: { value: lightTexture },
+  uLightAmount: { value: 0 },
   uAoRect: { value: new THREE.Vector4(-112, -96, 224, 192) },
   uAoStrength: { value: 0.6 },
 };
@@ -171,6 +176,8 @@ function weather(surface, { stains = true, ao = 0.6 } = {}) {
       .replace('#include <common>', `#include <common>
 varying vec3 vWeatherPos;
 uniform sampler2D uAoMap;
+uniform sampler2D uLightMap;
+uniform float uLightAmount;
 uniform vec4 uAoRect;
 uniform float uAoStrength;
 float wHash(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
@@ -178,6 +185,12 @@ float wNoise(vec3 p) {
   vec3 i = floor(p); vec3 f = fract(p); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(mix(wHash(i), wHash(i + vec3(1,0,0)), f.x), mix(wHash(i + vec3(0,1,0)), wHash(i + vec3(1,1,0)), f.x), f.y),
              mix(mix(wHash(i + vec3(0,0,1)), wHash(i + vec3(1,0,1)), f.x), mix(wHash(i + vec3(0,1,1)), wHash(i + vec3(1,1,1)), f.x), f.y), f.z);
+}`)
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+if (uLightAmount > 0.0) {
+  vec2 lightUv = vec2((vWeatherPos.x - uAoRect.x) / uAoRect.z, 1.0 - (vWeatherPos.z - uAoRect.y) / uAoRect.w);
+  float bakedLight = texture2D(uLightMap, lightUv).r;
+  totalEmissiveRadiance += diffuseColor.rgb * bakedLight * uLightAmount * vec3(1.0, 0.93, 0.78);
 }`)
       .replace('#include <color_fragment>', `#include <color_fragment>
 ${!stains ? '' : lowPower
@@ -2016,7 +2029,7 @@ renderer.setAnimationLoop(() => {
   }
   const glowGeometry = new THREE.BufferGeometry();
   glowGeometry.setAttribute('position', new THREE.Float32BufferAttribute(glowPositions, 3));
-  const glow = new THREE.Points(glowGeometry, new THREE.PointsMaterial({ map: new THREE.CanvasTexture(glowCanvas), size: 7, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+  const glow = new THREE.Points(glowGeometry, new THREE.PointsMaterial({ map: new THREE.CanvasTexture(glowCanvas), size: 4.2, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
   glow.visible = false;
   scene.add(glow);
   let mode = 'day';
@@ -2037,9 +2050,11 @@ renderer.setAnimationLoop(() => {
     floodlights.material.emissiveIntensity = preset.lamps;
     eveningMode = mode === 'evening';
     for (const spot of fieldLights) spot.visible = eveningMode;
+    aoUniforms.uLightAmount.value = eveningMode ? 1.6 : 0;
+    for (const spot of fieldLights) spot.intensity = 12000;
     if (bloomPass) bloomPass.enabled = eveningMode;
     glow.visible = mode === 'evening';
-    glow.material.opacity = mode === 'evening' ? 0.85 : 0;
+    glow.material.opacity = mode === 'evening' ? 0.7 : 0;
     renderer.shadowMap.needsUpdate = true;
   });
   document.body.appendChild(toggle);
