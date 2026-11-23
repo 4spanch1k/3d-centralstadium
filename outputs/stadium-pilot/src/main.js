@@ -27,7 +27,9 @@ const lowPower = window.matchMedia('(pointer: coarse)').matches;
 // Режим максимального качества (только ?quality=max, для съёмки и показа на мощном компьютере): родное разрешение экрана,
 // постоянное затенение, мягкие тени, глянцевый пластик. По умолчанию включён плавный режим с адаптивным разрешением.
 const qualityMax = !lowPower && new URLSearchParams(location.search).get('quality') === 'max';
-let pixelRatio = Math.min(window.devicePixelRatio, lowPower ? 1.25 : qualityMax ? 2 : 1.5);
+// Замер на Mac (Retina): обычный кадр 3–5 мс даже в 2×, а проход затенения GTAO добавляет 8–17 мс (он заново рисует всю сцену ради нормалей),
+// поэтому по умолчанию GTAO выключен, а сэкономленное идёт на чёткость (разрешение до 2×). Затенение даёт запечённая карта.
+let pixelRatio = Math.min(window.devicePixelRatio, lowPower ? 1.25 : 2);
 renderer.setPixelRatio(pixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -1827,7 +1829,7 @@ if (!initialHash && !matchMedia('(prefers-reduced-motion: reduce)').matches && !
 // Затенение в контактах (ambient occlusion): тёмные стыки между рядами, креслами и ступенями.
 // Включается только на десктопе; ?fx=0 в адресе отключает эффект.
 if (location.search.includes('debug')) {
-  window.__debug = { renderer, scene, camera };
+  window.__debug = { renderer, scene, camera, getComposer: () => composer, getAoCamera: () => aoCamera };
   // Экспорт сцены в GLB для рендера панорам в Blender (работает только с dev-сервером).
   // Список мест (трибуна, сектор, ряд, номер, положение камеры) для планирования сетки панорам.
   window.__debug.exportSeats = async () => {
@@ -1882,6 +1884,7 @@ if (!lowPower && new URLSearchParams(location.search).get('fx') !== '0') {
     const ao = new GTAOPass(scene, aoCamera, window.innerWidth, window.innerHeight);
     ao.updateGtaoMaterial({ radius: 0.9, distanceExponent: 1.4, thickness: 1.2, scale: 1.1, samples: qualityMax ? 16 : 12 });
     ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 8 });
+    ao.enabled = qualityMax;
     instance.addPass(ao);
     // Свечение ламп, светодиодных лент и табло: только вечером и только на компьютерах.
     bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.35, 0.45, 0.95);
@@ -1978,7 +1981,8 @@ renderer.setAnimationLoop(() => {
   }
   if (controls.enabled) controls.update();
   const showingPano = panoMode && view === 'seat';
-  const aoActive = composer && !showingPano && now >= aoPausedUntil && (qualityMax || stage === 'sector' || stage === 'confirm' || view === 'seat');
+  // Композитор нужен для GTAO (только ?quality=max) и для свечения вечером; днём кадр рисуется напрямую.
+  const aoActive = composer && !showingPano && now >= aoPausedUntil && (qualityMax || eveningMode);
   if (showingPano) renderer.render(panoScene, camera);
   else if (aoActive) {
     aoCamera.copy(camera, false);
