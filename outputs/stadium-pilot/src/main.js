@@ -913,6 +913,7 @@ modelLoader.load(asset('west-building.glb'), (model) => {
   scene.add(model.scene);
   renderer.shadowMap.needsUpdate = true;
 }, undefined, (error) => console.error('Не удалось загрузить здание трибуны:', error));
+let roofModel;
 modelLoader.load(asset('stadium-roof.glb'), (model) => {
   model.scene.traverse((object) => {
     if (object.isMesh) {
@@ -920,6 +921,8 @@ modelLoader.load(asset('stadium-roof.glb'), (model) => {
       object.receiveShadow = true;
     }
   });
+  roofModel = model.scene;
+  roofModel.visible = !sectorPlan.visible;
   scene.add(model.scene);
   renderer.shadowMap.needsUpdate = true;
 }, undefined, (error) => console.error('Не удалось загрузить модель навеса:', error));
@@ -1068,6 +1071,10 @@ function lookFromSeat() {
 function updatePlan() {
   sectorPlan.visible = bookingOpen && view === 'overview' && stage === 'stand';
   if (!sectorPlan.visible) hoverSector(null);
+  // Крыша убирается, чтобы под ней были видны сектора западной трибуны.
+  if (roofModel) roofModel.visible = !sectorPlan.visible;
+  roofLights.visible = !sectorPlan.visible;
+  renderer.shadowMap.needsUpdate = true;
 }
 function setView(name) {
   view = name;
