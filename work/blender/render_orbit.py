@@ -12,6 +12,10 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--frame', type=int)
 parser.add_argument('--samples', type=int, default=16)
 parser.add_argument('--width', type=int, default=1280)
+parser.add_argument('--radius', type=float, default=245)
+parser.add_argument('--height', type=float, default=145)
+parser.add_argument('--out', default='orbit-frames')
+parser.add_argument('--sky', default='sky.hdr')
 args = parser.parse_args(sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else [])
 root = Path(__file__).resolve().parents[2]
 bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -30,7 +34,7 @@ world.use_nodes = True
 scene.world = world
 nodes = world.node_tree.nodes
 sky = nodes.new('ShaderNodeTexEnvironment')
-sky.image = bpy.data.images.load(str(root / 'outputs/stadium-pilot/public/sky.hdr'))
+sky.image = bpy.data.images.load(str(root / 'outputs/stadium-pilot/public' / args.sky))
 world.node_tree.links.new(sky.outputs['Color'], nodes['Background'].inputs['Color'])
 
 sun = bpy.data.objects.new('Sun', bpy.data.lights.new('Sun', 'SUN'))
@@ -48,7 +52,7 @@ scene.frame_end = 144
 scene.render.fps = 24
 def position_camera(scene):
     angle = 2 * math.pi * (scene.frame_current - 1) / 144
-    camera.location = (245 * math.cos(angle), 245 * math.sin(angle), 145)
+    camera.location = (args.radius * math.cos(angle), args.radius * math.sin(angle), args.height)
     camera.rotation_euler = (Vector((0, 0, 5)) - camera.location).to_track_quat('-Z', 'Y').to_euler()
 
 bpy.app.handlers.frame_change_pre.append(position_camera)
@@ -72,7 +76,7 @@ scene.render.resolution_x = args.width
 scene.render.resolution_y = args.width * 9 // 16
 scene.render.resolution_percentage = 100
 scene.render.image_settings.file_format = 'PNG'
-output = root / 'work/exports/orbit-frames'
+output = root / 'work/exports' / args.out
 output.mkdir(parents=True, exist_ok=True)
 scene.render.filepath = str(output / 'frame-')
 if args.frame:

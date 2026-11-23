@@ -86,11 +86,19 @@ const horizonMesh = new THREE.Mesh(horizonGeometry, new THREE.MeshBasicMaterial(
 horizonMesh.layers.set(1);
 scene.add(horizonMesh);
 
-new HDRLoader().load(asset(lowPower ? 'sky.hdr' : 'sky-2k.hdr'), (texture) => {
+// Небо грузится в два шага: лёгкое 1k (1 МБ) сразу, а чёткое 2k (4 МБ) позже в фоне, когда сцена уже показана.
+function applySky(texture) {
   texture.mapping = THREE.EquirectangularReflectionMapping;
+  const previous = scene.background;
   scene.background = texture;
   scene.environment = texture;
-  scene.environmentIntensity = 0.45;
+  scene.environmentIntensity = scene.environmentIntensity || 0.45;
+  if (previous && previous.isTexture && previous !== texture) previous.dispose();
+  markDirty?.();
+}
+new HDRLoader().load(asset('sky.hdr'), (texture) => {
+  applySky(texture);
+  if (!lowPower) setTimeout(() => new HDRLoader().load(asset('sky-2k.hdr'), applySky, undefined, () => {}), 3000);
 }, undefined, (error) => console.error('Не удалось загрузить небо', error));
 const camera = new THREE.PerspectiveCamera(38, window.innerWidth / window.innerHeight, 0.1, 7500);
 camera.layers.enable(1);
@@ -161,8 +169,19 @@ const aoTexture = textureLoader.load(asset(lowPower ? 'ao-top-2k.webp' : 'ao-top
 aoTexture.colorSpace = THREE.SRGBColorSpace;
 aoTexture.anisotropy = 4;
 // Вечерний свет прожекторов, запечённый в Blender (work/blender/bake_floodlight_topdown.py), на той же области; 0 днём.
-const lightTexture = textureLoader.load(asset('light-evening.webp'), undefined, undefined, () => {});
-lightTexture.anisotropy = 4;
+// Карта вечернего света грузится только при первом включении вечера (в обычном заходе она не нужна).
+const lightTexture = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1);
+lightTexture.needsUpdate = true;
+let eveningLightLoaded = false;
+function loadEveningLight() {
+  if (eveningLightLoaded) return;
+  eveningLightLoaded = true;
+  textureLoader.load(asset('light-evening.webp'), (texture) => {
+    texture.anisotropy = 4;
+    aoUniforms.uLightMap.value = texture;
+    markDirty();
+  }, undefined, () => {});
+}
 const aoUniforms = {
   uAoMap: { value: aoTexture },
   uLightMap: { value: lightTexture },
@@ -1255,7 +1274,8 @@ function setView(name) {
   const phone = window.innerWidth <= 700;
   // «Выбрать место»: камера плавно поднимается и смотрит на стадион почти строго сверху, чтобы были видны все сектора.
   if (name === 'overview' && bookingOpen) moveCamera(new THREE.Vector3(0, phone ? 380 : 375, 50), target, phone ? 66 : 38, true, false, 1700);
-  else moveCamera(new THREE.Vector3(...selected.position), target, name === 'overview' ? (phone ? 66 : 38) : 50, name === 'overview');
+  else if (name === 'overview' && phone) moveCamera(new THREE.Vector3(...selected.position).multiplyScalar(0.86), target, 62, true);   // на телефоне стадион крупнее: он должен занимать почти всю ширину экрана
+  else moveCamera(new THREE.Vector3(...selected.position), target, name === 'overview' ? 38 : 50, name === 'overview');
   updateCameraFraming();
   updateSeatHighlights();
   document.querySelector('#app').classList.toggle('seat-mode', name !== 'overview');
@@ -1720,7 +1740,8 @@ canvas.addEventListener('pointerdown', (event) => {
 canvas.addEventListener('pointermove', (event) => {
   if (!dragging || view !== 'seat') return;
   yaw -= (event.clientX - lastX) * 0.004;
-  const yawLimit = panoMode ? panoYawLimit : 0.6;
+  // Живая камера: 180° (по 90° влево и вправо от направления на поле); у панорам предел задаётся её шириной.
+  const yawLimit = panoMode ? panoYawLimit : Math.PI / 2;
   const pitchLimit = panoMode ? panoPitchLimit : 0.35;
   yaw = THREE.MathUtils.clamp(yaw, initialYaw - yawLimit, initialYaw + yawLimit);
   pitch = THREE.MathUtils.clamp(pitch + (event.clientY - lastY) * 0.004, -pitchLimit, pitchLimit);
@@ -2180,6 +2201,7 @@ renderer.setAnimationLoop(() => {
     floodlights.material.emissiveIntensity = preset.lamps;
     eveningMode = mode === 'evening';
     for (const spot of fieldLights) spot.visible = eveningMode;
+    if (eveningMode) loadEveningLight();
     aoUniforms.uLightAmount.value = eveningMode ? 0.9 : 0;
     for (const spot of fieldLights) spot.intensity = 2500;
     if (bloomPass) bloomPass.enabled = eveningMode;
