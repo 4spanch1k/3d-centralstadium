@@ -96,7 +96,7 @@ const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
 controls.enablePan = false;
 controls.minDistance = 90;
-controls.maxDistance = 390;
+controls.maxDistance = 560;
 controls.maxPolarAngle = Math.PI / 2.2;
 controls.target.set(0, 4, 0);
 const hemisphere = new THREE.HemisphereLight('#f4f1e2', '#4a5c5a', 0.75);
@@ -2009,8 +2009,9 @@ renderer.setAnimationLoop(() => {
     }
   }
   // Динамическая ближняя плоскость: на больших расстояниях слои с разницей в сантиметры не мерцают (z-fighting).
-  const orbitDistance = controls.enabled && !cameraTransition ? camera.position.distanceTo(controls.target) : 0;
-  const nearPlane = orbitDistance > 40 ? Math.min(orbitDistance * 0.02, 8) : 0.1;
+  // Считается и во время облёта (раньше в полёте ближняя плоскость падала до 0,1 м: слои земли мерцали и пропадали, пока камера не доходила до конца).
+  const flightDistance = camera.position.y > 30 ? camera.position.length() : 0;
+  const nearPlane = flightDistance > 40 ? Math.min(flightDistance * 0.02, 8) : 0.1;
   if (Math.abs(camera.near - nearPlane) > 0.01) {
     camera.near = nearPlane;
     camera.updateProjectionMatrix();
