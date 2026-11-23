@@ -1888,8 +1888,20 @@ renderer.setAnimationLoop(() => {
 {
   const presets = {
     day: { sun: '#fff0d0', sunPower: 2.6, sunPosition: [-85, 140, -70], sky: '#f4f1e2', ground: '#4a5c5a', fill: 0.75, exposure: 1.05, env: 0.45, backdrop: 1, lamps: 0.6 },
-    evening: { sun: '#ff9f55', sunPower: 1.5, sunPosition: [-150, 38, -40], sky: '#8f9cc4', ground: '#3b3a4a', fill: 0.5, exposure: 0.95, env: 0.22, backdrop: 0.38, lamps: 2.4 },
+    evening: { sun: '#ff9f55', sunPower: 0.7, sunPosition: [-150, 38, -40], sky: '#8f9cc4', ground: '#3b3a4a', fill: 0.5, exposure: 0.95, env: 0.22, backdrop: 0.38, lamps: 2.4 },
   };
+  // Прожекторы: четыре мачты по углам освещают поле и трибуны тёплым белым светом (только вечером, без теней).
+  const fieldLights = [];
+  for (const x of [-102, 102]) {
+    for (const z of [-90, 90]) {
+      const spot = new THREE.SpotLight('#fff1d6', 34000, 0, 0.62, 0.7, 2);
+      spot.position.set(x, 31, z);
+      spot.target.position.set(0, 0, 0);
+      spot.visible = false;
+      scene.add(spot, spot.target);
+      fieldLights.push(spot);
+    }
+  }
   const toggle = document.createElement('button');
   toggle.type = 'button';
   toggle.textContent = 'День';
@@ -1937,6 +1949,7 @@ renderer.setAnimationLoop(() => {
     scene.backgroundIntensity = preset.backdrop;
     floodlights.material.emissiveIntensity = preset.lamps;
     eveningMode = mode === 'evening';
+    for (const spot of fieldLights) spot.visible = eveningMode;
     if (bloomPass) bloomPass.enabled = eveningMode;
     glow.visible = mode === 'evening';
     glow.material.opacity = mode === 'evening' ? 0.85 : 0;
