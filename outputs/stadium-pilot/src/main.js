@@ -992,6 +992,8 @@ modelLoader.load(asset('west-building.glb'), (model) => {
       object.receiveShadow = true;
     }
   });
+  // Здание закрывает проём в верхних рядах западной трибуны: после увеличения чаши проём сместился наружу.
+  model.scene.position.z = -72.5 * (bowlScaleZ - 1);
   scene.add(model.scene);
   renderer.shadowMap.needsUpdate = true;
 }, undefined, (error) => console.error('Не удалось загрузить здание трибуны:', error));
