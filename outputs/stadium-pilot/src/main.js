@@ -14,6 +14,7 @@ const usePanoramas = new URLSearchParams(location.search).get('pano') === '1';
 // Все ресурсы берутся относительно базового адреса сборки: работает и в подпапке (например, GitHub Pages).
 const asset = (path) => import.meta.env.BASE_URL + path;
 const canvas = document.querySelector('#stadium');
+const introVideo = document.querySelector('#stadium-intro');
 let renderer;
 try {
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
@@ -1568,6 +1569,26 @@ function mergeStatic() {
 mergeStatic();
 
 setView('overview');
+if (!initialHash && !matchMedia('(prefers-reduced-motion: reduce)').matches && !navigator.connection?.saveData) {
+  let showIntro = true;
+  const stopIntro = () => {
+    showIntro = false;
+    introVideo.classList.remove('visible');
+    introVideo.pause();
+  };
+  document.addEventListener('pointerdown', stopIntro, { once: true, capture: true });
+  document.addEventListener('keydown', stopIntro, { once: true, capture: true });
+  window.addEventListener('hashchange', stopIntro, { once: true });
+  const size = lowPower || window.innerWidth <= 700 ? 'mobile' : 'desktop';
+  const format = introVideo.canPlayType('video/webm; codecs="vp9"') ? 'webm' : 'mp4';
+  introVideo.src = asset(`stadium-orbit-${size}.${format}`);
+  introVideo.play().then(() => {
+    if (showIntro) introVideo.classList.add('visible');
+    else introVideo.pause();
+  }).catch(() => {
+    introVideo.hidden = true;
+  });
+}
 // Затенение в контактах (ambient occlusion): тёмные стыки между рядами, креслами и ступенями.
 // Включается только на десктопе; ?fx=0 в адресе отключает эффект.
 if (location.search.includes('debug')) {
