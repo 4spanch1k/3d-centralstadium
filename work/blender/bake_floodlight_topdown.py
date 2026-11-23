@@ -5,7 +5,8 @@
 (bake_ao_topdown.py): в браузере в вечернем режиме она добавляется к освещённости поверхностей по мировым координатам (x, z).
 
 Запуск: Blender -b -P bake_floodlight_topdown.py -- --glb ../exports/stadium-scene.glb --out ../exports/light-top.png [--px 2048] [--samples 128]
-Границы и параметры --bounds / --extra-glb те же, что у bake_ao_topdown.py; карта должна покрывать ту же область.
+Вместо --glb можно указать --blend. Границы и параметры --bounds / --extra-glb те же,
+что у bake_ao_topdown.py; карта должна покрывать ту же область.
 Положение прожекторов: --masts "x,z;x,z;..." (Three.js, метры), высота --mast-height (по умолчанию 31).
 """
 import bpy, sys, os, time, math
@@ -15,6 +16,9 @@ argv = sys.argv[sys.argv.index('--') + 1:]
 def arg(name, default=None):
     return argv[argv.index(name) + 1] if name in argv else default
 glb = arg('--glb')
+blend = arg('--blend')
+if bool(glb) == bool(blend):
+    raise ValueError('Specify exactly one of --glb or --blend')
 out = os.path.abspath(arg('--out'))
 px = int(arg('--px', 2048)); samples = int(arg('--samples', 128))
 power = float(arg('--power', 6.0e6))   # Вт на прожектор: подбирается по яркости поля на карте
@@ -28,8 +32,11 @@ else:
 HIDE_ABOVE = 5.5
 
 t0 = time.time()
-bpy.ops.wm.read_factory_settings(use_empty=True)
-bpy.ops.import_scene.gltf(filepath=os.path.abspath(glb))
+if blend:
+    bpy.ops.wm.open_mainfile(filepath=os.path.abspath(blend))
+else:
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    bpy.ops.import_scene.gltf(filepath=os.path.abspath(glb))
 for index, value in enumerate(argv):
     if value == '--extra-glb':
         bpy.ops.import_scene.gltf(filepath=os.path.abspath(argv[index + 1]))
