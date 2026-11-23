@@ -4,7 +4,7 @@ The field keeps its original dimensions. Only the bowl footprint and seat
 positions are scaled to 227 x 175 m; seat meshes and heights are not scaled.
 The intermediate landing, front barrier, aisle steps, rails and exits follow the existing site geometry.
 The preview includes a field, goals, track, west roof, east masts, west facade and Alatau terrain.
-It also includes a camera and light for rendering the assembled model.
+It includes a camera, light and the project concrete textures for rendering.
 Seat directions follow the row tangent after scaling, including across gaps.
 Seat identifiers are copied from work/exports/seats.json, produced by
 window.__debug.exportSeats() on the development server. The number of rows and
@@ -384,13 +384,39 @@ scene.render.resolution_x = 1280
 scene.render.resolution_y = 720
 scene.render.resolution_percentage = 100
 
-bpy.context.preferences.filepaths.save_version = 0
-output = root / 'work/exports/stadium-bowl-scaled.blend'
-bpy.ops.wm.save_as_mainfile(filepath=str(output))
 bpy.ops.object.select_all(action='DESELECT')
 for name in ('Scaled bowl', 'Aisle steps', 'Aisle rails', 'Exit frames'):
     bpy.data.objects[name].select_set(True)
 static_output = root / 'work/exports/stadium-bowl-static.glb'
 bpy.ops.export_scene.gltf(filepath=str(static_output), export_format='GLB', use_selection=True)
+
+# Reuse the site's CC0 material in the .blend without embedding duplicate textures in the static GLB.
+nodes = concrete.node_tree.nodes
+links = concrete.node_tree.links
+coordinates = nodes.new('ShaderNodeTexCoord')
+mapping = nodes.new('ShaderNodeMapping')
+mapping.inputs['Scale'].default_value = (5, 2, 1)
+links.new(coordinates.outputs['UV'], mapping.inputs['Vector'])
+shader = nodes['Principled BSDF']
+for filename, target in (('concrete-diff.webp', 'Base Color'),
+                         ('concrete-rough.webp', 'Roughness'),
+                         ('concrete-normal.webp', 'Normal')):
+    texture = nodes.new('ShaderNodeTexImage')
+    texture.image = bpy.data.images.load(str(root / 'outputs/stadium-pilot/public' / filename))
+    if target != 'Base Color':
+        texture.image.colorspace_settings.name = 'Non-Color'
+    texture.image.pack()
+    links.new(mapping.outputs['Vector'], texture.inputs['Vector'])
+    if target == 'Normal':
+        normal = nodes.new('ShaderNodeNormalMap')
+        normal.inputs['Strength'].default_value = 0.35
+        links.new(texture.outputs['Color'], normal.inputs['Color'])
+        links.new(normal.outputs['Normal'], shader.inputs['Normal'])
+    else:
+        links.new(texture.outputs['Color'], shader.inputs[target])
+
+bpy.context.preferences.filepaths.save_version = 0
+output = root / 'work/exports/stadium-bowl-scaled.blend'
+bpy.ops.wm.save_as_mainfile(filepath=str(output))
 print(f'Bowl: 227 x 175 m; scale x={scale_x:.6f}, z={scale_z:.6f}; seats={len(seats)}')
 print(f'Static bowl: {static_output}')
