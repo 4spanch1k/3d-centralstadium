@@ -1038,13 +1038,13 @@ let lastX = 0;
 let lastY = 0;
 let cameraTransition;
 let firstView = true;
-function moveCamera(position, target, fov, orbit, instant = false) {
+function moveCamera(position, target, fov, orbit, instant = false, time = 850) {
   const destination = camera.clone();
   destination.position.copy(position);
   destination.lookAt(target);
   controls.enabled = false;
   if (orbit) controls.target.copy(target);
-  const duration = instant || firstView || matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 850;
+  const duration = instant || firstView || matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : time;
   firstView = false;
   cameraTransition = {
     start: performance.now(), duration, orbit,
@@ -1084,7 +1084,10 @@ function setView(name) {
   clearMarker();
   const selected = views[name];
   const target = name === 'overview' ? new THREE.Vector3(0, 4, 0) : new THREE.Vector3(...selected.target);
-  moveCamera(new THREE.Vector3(...selected.position), target, name === 'overview' ? (window.innerWidth <= 700 ? 66 : 38) : 50, name === 'overview');
+  const phone = window.innerWidth <= 700;
+  // «Выбрать место»: камера плавно поднимается и смотрит на стадион почти строго сверху, чтобы были видны все сектора.
+  if (name === 'overview' && bookingOpen) moveCamera(new THREE.Vector3(0, phone ? 300 : 340, 46), target, phone ? 66 : 38, true, false, 1700);
+  else moveCamera(new THREE.Vector3(...selected.position), target, name === 'overview' ? (phone ? 66 : 38) : 50, name === 'overview');
   updateCameraFraming();
   updateSeatHighlights();
   document.querySelector('#app').classList.toggle('seat-mode', name !== 'overview');
