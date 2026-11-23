@@ -195,9 +195,16 @@ if (uLightAmount > 0.0) {
       .replace('#include <color_fragment>', `#include <color_fragment>
 ${!stains ? '' : lowPower
   ? 'float stain = wNoise(vWeatherPos * 0.35) * 0.7 + wNoise(vWeatherPos * 1.7) * 0.3;\ndiffuseColor.rgb *= mix(0.72, 1.08, stain);'
-  : `float stain = wNoise(vWeatherPos * 0.35) * 0.6 + wNoise(vWeatherPos * 1.7) * 0.3 + wNoise(vWeatherPos * 7.0) * 0.1;
-diffuseColor.rgb *= mix(0.72, 1.08, stain);
-diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.86, 0.9, 0.84), smoothstep(0.55, 0.8, wNoise(vWeatherPos * 0.9)));`}
+  : `float stain;
+if (length(vViewPosition) > 140.0) {
+  // Издали мелкие разводы не видны: один отсчёт шума вместо пяти.
+  stain = wNoise(vWeatherPos * 0.35);
+  diffuseColor.rgb *= mix(0.72, 1.08, stain);
+} else {
+  stain = wNoise(vWeatherPos * 0.35) * 0.6 + wNoise(vWeatherPos * 1.7) * 0.3 + wNoise(vWeatherPos * 7.0) * 0.1;
+  diffuseColor.rgb *= mix(0.72, 1.08, stain);
+  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.86, 0.9, 0.84), smoothstep(0.55, 0.8, wNoise(vWeatherPos * 0.9)));
+}`}
 vec2 aoUv = vec2((vWeatherPos.x - uAoRect.x) / uAoRect.z, 1.0 - (vWeatherPos.z - uAoRect.y) / uAoRect.w);
 float bakedAo = texture2D(uAoMap, aoUv).r;
 diffuseColor.rgb *= mix(1.0, bakedAo, uAoStrength);
@@ -803,6 +810,36 @@ seats.forEach((seat, index) => {
   if (!sectorSeatIndices.has(seat.sector)) sectorSeatIndices.set(seat.sector, []);
   sectorSeatIndices.get(seat.sector).push(index);
 });
+// Поиск места под курсором без пересечения луча с 25 тысячами плиток: сетка 4 м по (x, z) и шаги по высоте вдоль луча сверху вниз.
+const seatGrid = new Map();
+const seatCell = (value) => Math.floor(value / 4);
+seats.forEach((seat) => {
+  if (seat.hidden) return;
+  const key = `${seatCell(seat.position.x)}|${seatCell(seat.position.z)}`;
+  if (!seatGrid.has(key)) seatGrid.set(key, []);
+  seatGrid.get(key).push(seat);
+});
+const planPoint = new THREE.Vector3();
+function pickPlanSeat(ray) {
+  if (Math.abs(ray.direction.y) < 0.05) return null;
+  for (let height = 14; height > 0.2; height -= 0.25) {
+    const t = (height - ray.origin.y) / ray.direction.y;
+    if (t < 0) continue;
+    planPoint.copy(ray.direction).multiplyScalar(t).add(ray.origin);
+    const cx = seatCell(planPoint.x);
+    const cz = seatCell(planPoint.z);
+    for (let dx = -1; dx <= 1; dx += 1) {
+      for (let dz = -1; dz <= 1; dz += 1) {
+        const list = seatGrid.get(`${cx + dx}|${cz + dz}`);
+        if (!list) continue;
+        for (const seat of list) {
+          if (Math.abs(seat.position.y + 0.5 - height) < 0.4 && Math.hypot(seat.position.x - planPoint.x, seat.position.z - planPoint.z) < 0.8) return seat;
+        }
+      }
+    }
+  }
+  return null;
+}
 sectorPlan.visible = false;
 sectorPlan.frustumCulled = false;
 scene.add(sectorPlan);
@@ -1644,8 +1681,7 @@ canvas.addEventListener('pointerup', (event) => {
   if (view === 'overview') {
     // Сначала цветная плитка сектора; если попали между плитками (проход, граница, ступень), берём ближайшее кресло к точке попадания.
     let seat = null;
-    const tile = raycaster.intersectObject(sectorPlan)[0];
-    if (tile) seat = seats[tile.instanceId];
+    seat = pickPlanSeat(raycaster.ray);
     if (!seat || seat.hidden) {
       const hit = raycaster.intersectObjects(standLevels)[0];
       if (!hit) return;
@@ -1699,8 +1735,12 @@ canvas.addEventListener('pointermove', (event) => {
   const bounds = canvas.getBoundingClientRect();
   hoverPointer.set((event.clientX - bounds.left) / bounds.width * 2 - 1, -(event.clientY - bounds.top) / bounds.height * 2 + 1);
   hoverRaycaster.setFromCamera(hoverPointer, camera);
-  const hit = hoverRaycaster.intersectObject(plan ? sectorPlan : sectorHits)[0];
-  const seat = hit && (plan ? seats : sectorRefs)[hit.instanceId];
+  let seat;
+  if (plan) seat = pickPlanSeat(hoverRaycaster.ray);
+  else {
+    const hit = hoverRaycaster.intersectObject(sectorHits)[0];
+    seat = hit && sectorRefs[hit.instanceId];
+  }
   if (!seat || seat.hidden) {
     seatTip.hidden = true;
     canvas.style.cursor = '';
@@ -1857,6 +1897,7 @@ if (!lowPower && new URLSearchParams(location.search).get('fx') !== '0') {
 const maxPixelRatio = pixelRatio;
 const minPixelRatio = lowPower ? 0.85 : qualityMax ? maxPixelRatio : 1.0;
 let pixelCeiling = maxPixelRatio;
+let lastViewCap = maxPixelRatio;
 let lastActivity = performance.now() + 8000;
 let lastRender = 0;
 let frameTotal = 0;
@@ -1901,6 +1942,13 @@ renderer.setAnimationLoop(() => {
   if (gap < (active ? 15 : 50)) return;
   lastRender = now;
   // Смена разрешения очищает холст, поэтому применяется в начале кадра, прямо перед отрисовкой: иначе мелькает пустой кадр.
+  // На общем виде и плане детали мелкие: разрешение ограничено 1,0, при возврате к месту поднимается обратно.
+  const viewCap = view === 'overview' && !qualityMax ? Math.min(maxPixelRatio, 1.0) : maxPixelRatio;
+  if (viewCap !== lastViewCap) {
+    lastViewCap = viewCap;
+    pendingPixelRatio = Math.min(viewCap, pixelCeiling);
+    pixelRatio = pendingPixelRatio;
+  }
   if (pendingPixelRatio !== null) {
     applyPixelRatio(pendingPixelRatio);
     pendingPixelRatio = null;
@@ -1969,8 +2017,8 @@ renderer.setAnimationLoop(() => {
         lastResolutionChange = now;
         markDirty();
         if (justRaised) noRaiseUntil = now + 30000;
-      } else if (average < 17.6 && pixelRatio < maxPixelRatio && now > noRaiseUntil && now - lastRaise > 8000) {
-        pendingPixelRatio = Math.min(maxPixelRatio, pixelRatio + 0.1);
+      } else if (average < 17.6 && pixelRatio < viewCap && now > noRaiseUntil && now - lastRaise > 8000) {
+        pendingPixelRatio = Math.min(viewCap, pixelRatio + 0.1);
         pixelRatio = pendingPixelRatio;
         lastRaise = now;
         markDirty();
