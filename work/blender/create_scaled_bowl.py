@@ -3,7 +3,7 @@
 The field keeps its original dimensions. Only the bowl footprint and seat
 positions are scaled to 227 x 175 m; seat meshes and heights are not scaled.
 The intermediate landing, aisle steps, rails and exit frames follow the existing site geometry.
-The preview includes a field, running track, west roof, east masts and west facade.
+The preview includes a field, goals, running track, west roof, east masts and west facade.
 It also includes a camera and light for rendering the assembled model.
 Seat directions follow the row tangent after scaling, including across gaps.
 Seat identifiers are copied from work/exports/seats.json, produced by
@@ -113,7 +113,7 @@ bpy.context.collection.objects.link(bpy.data.objects.new('Running track', track_
 markings = bmesh.new()
 for lane in range(9):
     offset = lane * 1.22
-    flat_ring(markings, 55 + offset, 36 + offset, 54.94 + offset, 35.94 + offset, 16 + offset, 0.07)
+    flat_ring(markings, 55 + offset, 36 + offset, 54.94 + offset, 35.94 + offset, 16 + offset, 0.041)
 for x1, y1, x2, y2 in ((-52.5, -34, 52.5, -34), (-52.5, 34, 52.5, 34),
                        (-52.5, -34, -52.5, 34), (52.5, -34, 52.5, 34), (0, -34, 0, 34),
                        (-52.5, -20, -36, -20), (-36, -20, -36, 20), (-36, 20, -52.5, 20),
@@ -123,19 +123,72 @@ for x1, y1, x2, y2 in ((-52.5, -34, 52.5, -34), (-52.5, 34, 52.5, 34),
     dx, dy = x2 - x1, y2 - y1
     length = math.hypot(dx, dy)
     nx, ny = -dy / length * 0.09, dx / length * 0.09
-    corners = [markings.verts.new((x, y, 0.12)) for x, y in
+    corners = [markings.verts.new((x, y, 0.061)) for x, y in
                ((x1 + nx, y1 + ny), (x1 - nx, y1 - ny), (x2 - nx, y2 - ny), (x2 + nx, y2 + ny))]
     markings.faces.new(corners)
 for i in range(64):
     a, b = 2 * math.pi * i / 64, 2 * math.pi * (i + 1) / 64
-    corners = [markings.verts.new((r * math.cos(angle), r * math.sin(angle), 0.12))
+    corners = [markings.verts.new((r * math.cos(angle), r * math.sin(angle), 0.061))
                for r, angle in ((9, a), (9.16, a), (9.16, b), (9, b))]
     markings.faces.new(corners)
+span = math.acos(5.5 / 9.15)
+for side in (-1, 1):
+    center_x = side * 41.5
+    start_angle = -span if side < 0 else math.pi - span
+    for i in range(40):
+        a = start_angle + 2 * span * i / 40
+        b = start_angle + 2 * span * (i + 1) / 40
+        corners = [markings.verts.new((center_x + r * math.cos(angle), r * math.sin(angle), 0.061))
+                   for r, angle in ((9, a), (9.16, a), (9.16, b), (9, b))]
+        markings.faces.new(corners)
+for center_x, radius in ((0, 0.2), (-41.5, 0.15), (41.5, 0.15)):
+    points = [markings.verts.new((center_x + radius * math.cos(2 * math.pi * i / 16),
+                                  radius * math.sin(2 * math.pi * i / 16), 0.061)) for i in range(16)]
+    markings.faces.new(points)
 marking_mesh = bpy.data.meshes.new('Pitch and lane markings')
 markings.to_mesh(marking_mesh)
 markings.free()
 marking_mesh.materials.append(white)
 bpy.context.collection.objects.link(bpy.data.objects.new('Pitch and lane markings', marking_mesh))
+
+
+goal_frames = bmesh.new()
+for side in (-1, 1):
+    x = side * 52.5
+    for y in (-3.66, 3.66):
+        vertices = bmesh.ops.create_cone(goal_frames, cap_ends=True, segments=8,
+                                         radius1=0.06, radius2=0.06, depth=2.44)['verts']
+        bmesh.ops.translate(goal_frames, verts=vertices, vec=(x, y, 1.22))
+    vertices = bmesh.ops.create_cone(goal_frames, cap_ends=True, segments=8,
+                                     radius1=0.06, radius2=0.06, depth=7.32)['verts']
+    bmesh.ops.rotate(goal_frames, verts=vertices, cent=(0, 0, 0), matrix=Matrix.Rotation(math.pi / 2, 3, 'X'))
+    bmesh.ops.translate(goal_frames, verts=vertices, vec=(x, 0, 2.44))
+goal_mesh = bpy.data.meshes.new('Goal frames')
+goal_frames.to_mesh(goal_mesh)
+goal_frames.free()
+goal_mesh.materials.append(white)
+bpy.context.collection.objects.link(bpy.data.objects.new('Goal frames', goal_mesh))
+
+goal_nets = bmesh.new()
+for side in (-1, 1):
+    x = side * 52.5
+    lines = [((x, -3.6 + i * 0.6, 2.44), (x + side * 2, -3.6 + i * 0.6, 0.1)) for i in range(13)]
+    for height in (0.5, 0.95, 1.4, 1.85, 2.3):
+        back_x = x + side * (2 - height / 2.44 * 2)
+        lines.append(((back_x, -3.66, height), (back_x, 3.66, height)))
+    for start, end in lines:
+        start, end = Vector(start), Vector(end)
+        direction = end - start
+        vertices = bmesh.ops.create_cone(goal_nets, cap_ends=False, segments=4,
+                                         radius1=0.012, radius2=0.012, depth=direction.length)['verts']
+        bmesh.ops.rotate(goal_nets, verts=vertices, cent=(0, 0, 0),
+                         matrix=direction.to_track_quat('Z', 'Y').to_matrix())
+        bmesh.ops.translate(goal_nets, verts=vertices, vec=(start + end) / 2)
+net_mesh = bpy.data.meshes.new('Goal nets')
+goal_nets.to_mesh(net_mesh)
+goal_nets.free()
+net_mesh.materials.append(white)
+bpy.context.collection.objects.link(bpy.data.objects.new('Goal nets', net_mesh))
 
 
 vertices, faces = [], []
