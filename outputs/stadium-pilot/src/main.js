@@ -1190,6 +1190,7 @@ let panoYawLimit = 0.6;
 let panoPitchLimit = 0.35;
 let panoNodes = null;
 const panoTextures = new Map();
+let panoSphere;
 let panoNodeList = null;
 function loadPanoNodes() {
   if (!panoNodes) {
@@ -1204,113 +1205,28 @@ function chooseNode(nodes, position) {
     .filter((entry) => (entry.item.sector ? entry.item.stand === seat?.stand && entry.item.sector === seat?.sector : entry.distance < (entry.item.radius ?? 3)))
     .sort((a, b) => a.distance - b.distance)[0]?.item;
 }
-// Панорама проецируется на упрощённую геометрию (поле, склон трибуны, купол) из точки съёмки, а камера стоит в кресле.
-// Так смещение кресла от точки съёмки даёт правильный параллакс: поле, дорожки и ряды рядом сдвигаются как в жизни.
-const panoMaterial = new THREE.ShaderMaterial({
-  depthTest: false,
-  depthWrite: false,
-  uniforms: {
-    uMap: { value: null },
-    uInvProj: { value: new THREE.Matrix4() },
-    uCam: { value: new THREE.Matrix4() },
-    uNode: { value: new THREE.Vector3() },
-    uOutward: { value: new THREE.Vector2(1, 0) },
-    uBaseY: { value: 0 },
-    uSlope: { value: 0.514 },
-    uYaw: { value: 0 },
-    uLon: { value: 1.3 },
-    uLatUp: { value: 0.9 },
-    uLatDown: { value: 0.9 },
-  },
-  vertexShader: `
-    varying vec2 vNdc;
-    void main() { vNdc = position.xy; gl_Position = vec4(position.xy, 0.0, 1.0); }
-  `,
-  fragmentShader: `
-    uniform sampler2D uMap;
-    uniform mat4 uInvProj;
-    uniform mat4 uCam;
-    uniform vec3 uNode;
-    uniform vec2 uOutward;
-    uniform float uBaseY;
-    uniform float uSlope;
-    uniform float uYaw;
-    uniform float uLon;
-    uniform float uLatUp;
-    uniform float uLatDown;
-    varying vec2 vNdc;
-    const float PI = 3.14159265359;
-    void main() {
-      vec3 viewDir = (uInvProj * vec4(vNdc, 1.0, 1.0)).xyz;
-      vec3 d = normalize((uCam * vec4(viewDir, 0.0)).xyz);
-      vec3 o = (uCam * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
-      float best = 1e9;
-      vec3 hit = o + d * 150.0;
-      // купол вокруг центра стадиона (трибуны напротив, небо)
-      float b = dot(o, d);
-      float disc = b * b - (dot(o, o) - 22500.0);
-      if (disc > 0.0) { best = -b + sqrt(disc); hit = o + d * best; }
-      // поле и дорожки: плоскость y = 0
-      if (d.y < -1e-4) {
-        float t = -o.y / d.y;
-        vec3 p = o + d * t;
-        if (t > 0.0 && t < best && length(p.xz) < 78.0) { best = t; hit = p; }
-      }
-      // склон трибуны вокруг точки съёмки: y = baseY + slope * (расстояние вдоль «наружу»)
-      float a = d.y - uSlope * dot(d.xz, uOutward);
-      if (abs(a) > 1e-4) {
-        float t = (uBaseY + uSlope * dot(o.xz - uNode.xz, uOutward) - o.y) / a;
-        if (t > 0.0 && t < best) {
-          vec3 p = o + d * t;
-          vec2 q = p.xz - uNode.xz;
-          if (abs(dot(q, uOutward)) < 20.0 && abs(dot(q, vec2(-uOutward.y, uOutward.x))) < 26.0) { best = t; hit = p; }
-        }
-      }
-      vec3 r = normalize(hit - uNode);
-      float lon = atan(r.z, r.x) - uYaw;
-      lon = atan(sin(lon), cos(lon));
-      float lat = asin(clamp(r.y, -1.0, 1.0));
-      vec2 uv = vec2(0.5 + lon / (2.0 * uLon), (lat + uLatDown) / (uLatUp + uLatDown));
-      float edge = smoothstep(0.0, 0.02, uv.x) * smoothstep(1.0, 0.98, uv.x) * smoothstep(0.0, 0.02, uv.y) * smoothstep(1.0, 0.98, uv.y);
-      vec3 color = texture2D(uMap, clamp(uv, 0.001, 0.999)).rgb;
-      gl_FragColor = vec4(color * mix(0.55, 1.0, edge), 1.0);
-      #include <colorspace_fragment>
-    }
-  `,
-});
-const panoQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), panoMaterial);
-panoQuad.frustumCulled = false;
-panoQuad.onBeforeRender = (rendererArg, sceneArg, cameraArg) => {
-  panoMaterial.uniforms.uInvProj.value.copy(cameraArg.projectionMatrixInverse);
-  panoMaterial.uniforms.uCam.value.copy(cameraArg.matrixWorld);
-};
-panoScene.add(panoQuad);
-// Применяет панораму: текстура и параметры проекции, пределы поворота, стартовый взгляд.
+// Применяет панораму: сфера с картинкой, пределы поворота, стартовый взгляд. Возвращает true, если панорама показана.
 function applyPanorama(node, texture, position) {
   const lon = THREE.MathUtils.degToRad(node.lon);
   const up = THREE.MathUtils.degToRad(node.latUp);
   const down = THREE.MathUtils.degToRad(node.latDown);
-  const nodePosition = new THREE.Vector3(...node.position);
-  const outward = new THREE.Vector2(nodePosition.x, nodePosition.z).normalize();
-  const uniforms = panoMaterial.uniforms;
-  uniforms.uMap.value = texture;
-  uniforms.uNode.value.copy(nodePosition);
-  uniforms.uOutward.value.copy(outward);
-  uniforms.uBaseY.value = nodePosition.y - 1.25;
+  if (panoSphere) { panoScene.remove(panoSphere); panoSphere.geometry.dispose(); panoSphere.material.dispose(); }
+  const geometry = new THREE.SphereGeometry(100, 96, 48, 0, lon * 2, Math.PI / 2 - up, up + down);
+  const material = new THREE.MeshBasicMaterial({ map: texture, side: THREE.BackSide, toneMapped: false });
+  panoSphere = new THREE.Mesh(geometry, material);
+  panoSphere.position.set(position.x, position.y, position.z);
+  // Картинка привязана к направлению узла на поле (центр изображения смотрит туда); взгляд по умолчанию тоже туда.
   const nodeYaw = node.yaw ?? initialYaw;
-  uniforms.uYaw.value = nodeYaw;
-  uniforms.uLon.value = lon;
-  uniforms.uLatUp.value = up;
-  uniforms.uLatDown.value = down;
-  // Центр пределов поворота остаётся на направлении съёмки, а стартовый взгляд направлен на поле уже из самого кресла.
-  const seatYaw = Math.atan2(-position.z, -position.x);
+  panoSphere.rotation.y = Math.PI - lon - nodeYaw;
   initialYaw = nodeYaw;
+  yaw = nodeYaw;
+  panoScene.add(panoSphere);
   const fov = seatFov();
   const halfH = Math.atan(Math.tan(THREE.MathUtils.degToRad(fov / 2)) * Math.min(camera.aspect, 2.2));
   panoYawLimit = Math.max(0.05, lon - halfH - 0.03);
   panoPitchLimit = Math.max(0.03, Math.min(up, down) - THREE.MathUtils.degToRad(fov / 2) - 0.02);
   panoMode = true;
-  yaw = THREE.MathUtils.clamp(seatYaw, initialYaw - panoYawLimit, initialYaw + panoYawLimit);
+  yaw = THREE.MathUtils.clamp(yaw, initialYaw - panoYawLimit, initialYaw + panoYawLimit);
   // Стартовый взгляд чуть выше горизонта: видно поле, а не кресла под ногами.
   pitch = THREE.MathUtils.clamp(0.04, -panoPitchLimit, panoPitchLimit);
   camera.fov = fov;
@@ -1714,10 +1630,6 @@ for (const name of ['pointerdown', 'pointermove', 'pointerup', 'wheel', 'keydown
   window.addEventListener(name, markDirty, { passive: true, capture: true });
 }
 controls.addEventListener('change', markDirty);
-// Вкладка, открытая в фоне и показанная позже, перерисовывается сразу, без движения мыши.
-document.addEventListener('visibilitychange', () => { if (!document.hidden) markDirty(); });
-window.addEventListener('focus', markDirty);
-window.addEventListener('pageshow', markDirty);
 THREE.DefaultLoadingManager.onProgress = (url, loaded, total) => {
   if (loadingNote && total) loadingNote.textContent = `Загрузка модели… ${Math.round(loaded / total * 100)}%`;
   markDirty();
