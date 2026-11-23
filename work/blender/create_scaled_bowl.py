@@ -42,15 +42,19 @@ seat_mesh.materials.append(seat_material)
 
 
 def outline(half_x, half_y, radius):
+    corners = (
+        ((half_x, half_y - radius), (half_x, half_y), (half_x - radius, half_y)),
+        ((-half_x + radius, half_y), (-half_x, half_y), (-half_x, half_y - radius)),
+        ((-half_x, -half_y + radius), (-half_x, -half_y), (-half_x + radius, -half_y)),
+        ((half_x - radius, -half_y), (half_x, -half_y), (half_x, -half_y + radius)),
+    )
     points = []
-    for cx, cy, start in ((half_x - radius, half_y - radius, 0),
-                          (-half_x + radius, half_y - radius, 90),
-                          (-half_x + radius, -half_y + radius, 180),
-                          (half_x - radius, -half_y + radius, 270)):
+    for start, control, end in corners:
         for i in range(13):
-            angle = math.radians(start + 90 * i / 12)
-            points.append(((cx + radius * math.cos(angle)) * scale_x,
-                           (cy + radius * math.sin(angle)) * scale_z))
+            t = i / 12
+            x = (1 - t) ** 2 * start[0] + 2 * (1 - t) * t * control[0] + t ** 2 * end[0]
+            y = (1 - t) ** 2 * start[1] + 2 * (1 - t) * t * control[1] + t ** 2 * end[1]
+            points.append((x * scale_x, y * scale_z))
     return points
 
 
