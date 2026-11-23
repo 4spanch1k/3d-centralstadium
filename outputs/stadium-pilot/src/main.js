@@ -1016,9 +1016,10 @@ const scoreboardScreen = material('#151d1d');
 for (const z of [-4.5, 4.5]) box(1, 10, 1, -99, 5, z, scoreboardFrame);
 box(1.2, 7.6, 15, -99, 13.8, 0, scoreboardFrame);
 const scoreCanvas = document.createElement('canvas');
-scoreCanvas.width = 1024;
-scoreCanvas.height = 480;
+scoreCanvas.width = 2048;
+scoreCanvas.height = 960;
 const scoreContext = scoreCanvas.getContext('2d');
+scoreContext.scale(2, 2);
 scoreContext.fillStyle = '#071014';
 scoreContext.fillRect(0, 0, 1024, 480);
 scoreContext.textAlign = 'center';
@@ -1031,10 +1032,17 @@ scoreContext.fillText('0 : 0', 512, 300);
 scoreContext.fillStyle = '#4c9bff';
 scoreContext.font = '600 56px system-ui, sans-serif';
 scoreContext.fillText('АЛМАТЫ  ·  00:00', 512, 410);
+// Сетка светодиодов: тёмные промежутки между «пикселями» табло.
+scoreContext.setTransform(1, 0, 0, 1, 0, 0);
+scoreContext.fillStyle = 'rgba(0, 0, 0, 0.55)';
+for (let x = 0; x < 2048; x += 8) scoreContext.fillRect(x, 0, 2, 960);
+for (let y = 0; y < 960; y += 8) scoreContext.fillRect(0, y, 2048, 2);
 const scoreTexture = new THREE.CanvasTexture(scoreCanvas);
 scoreTexture.colorSpace = THREE.SRGBColorSpace;
-scoreTexture.anisotropy = 4;
-const scoreLit = new THREE.MeshStandardMaterial({ map: scoreTexture, emissive: '#ffffff', emissiveMap: scoreTexture, emissiveIntensity: 0.9, roughness: 0.4 });
+scoreTexture.anisotropy = 8;
+const scoreLit = new THREE.MeshStandardMaterial({ map: scoreTexture, emissive: '#ffffff', emissiveMap: scoreTexture, emissiveIntensity: 1.2, roughness: 0.35 });
+// Тёмная рамка вокруг экрана табло.
+box(0.04, 7.2, 14.5, -98.38, 13.8, 0, scoreboardScreen);
 const scoreScreen = new THREE.Mesh(new THREE.BoxGeometry(0.08, 6.4, 13.7), [scoreLit, scoreboardScreen, scoreboardScreen, scoreboardScreen, scoreboardScreen, scoreboardScreen]);
 scoreScreen.position.set(-98.36, 13.8, 0);
 scene.add(scoreScreen);
@@ -1077,6 +1085,30 @@ floodlights.instanceMatrix.needsUpdate = true;
 for (const z of [-50.5, 50.5]) {
   for (let x = -48; x <= 48; x += 4) box(0.06, 1.1, 0.06, x, 0.7, z, steel);
   for (const y of [0.5, 1.15]) box(96, 0.06, 0.06, 0, y, z, steel);
+}
+// Сетка-рабица между стойками ограждения: ромбовидный рисунок на прозрачной плоскости.
+{
+  const netCanvas = document.createElement('canvas');
+  netCanvas.width = 64;
+  netCanvas.height = 64;
+  const netContext = netCanvas.getContext('2d');
+  netContext.strokeStyle = '#cfd6d4';
+  netContext.lineWidth = 3;
+  netContext.beginPath();
+  netContext.moveTo(0, 32); netContext.lineTo(32, 0); netContext.lineTo(64, 32); netContext.lineTo(32, 64); netContext.lineTo(0, 32);
+  netContext.stroke();
+  const netTexture = new THREE.CanvasTexture(netCanvas);
+  netTexture.colorSpace = THREE.SRGBColorSpace;
+  netTexture.wrapS = THREE.RepeatWrapping;
+  netTexture.wrapT = THREE.RepeatWrapping;
+  netTexture.repeat.set(96 / 0.12, 0.65 / 0.12);
+  netTexture.anisotropy = 8;
+  const netMaterial = new THREE.MeshBasicMaterial({ map: netTexture, transparent: true, alphaTest: 0.25, side: THREE.DoubleSide, depthWrite: false });
+  for (const z of [-50.5, 50.5]) {
+    const net = new THREE.Mesh(new THREE.PlaneGeometry(96, 0.65), netMaterial);
+    net.position.set(0, 0.825, z);
+    scene.add(net);
+  }
 }
 
 const views = {
