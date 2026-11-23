@@ -690,15 +690,22 @@ const detailMeshes = {
   blue: new THREE.InstancedMesh(seatGeometry, blueSeats, detailCapacity),
   green: new THREE.InstancedMesh(seatGeometry, greenSeats, detailCapacity),
 };
+// Три уровня кресла: рядом (до 20 м) подробная модель из stadium-seat.glb, дальше упрощённая (около 200 треугольников), ещё дальше простые кубики.
+const nearDetailRadius = lowPower ? 14 : qualityMax ? 30 : 20;
+const detailMid = {
+  yellow: new THREE.InstancedMesh(seatGeometry, yellowSeats, detailCapacity),
+  blue: new THREE.InstancedMesh(seatGeometry, blueSeats, detailCapacity),
+  green: new THREE.InstancedMesh(seatGeometry, greenSeats, detailCapacity),
+};
 const detailLegs = new THREE.InstancedMesh(supportGeometry, material('#59645e', 0.75), detailCapacity * 3);
 const sectorHits = new THREE.InstancedMesh(hitGeometry, new THREE.MeshBasicMaterial(), detailCapacity * 3);
 sectorHits.visible = false;
 const sectorRefs = [];
-for (const mesh of [...Object.values(detailMeshes), detailLegs, sectorHits]) {
+for (const mesh of [...Object.values(detailMeshes), ...Object.values(detailMid), detailLegs, sectorHits]) {
   mesh.count = 0;
   mesh.frustumCulled = false;
 }
-scene.add(...Object.values(detailMeshes), detailLegs, sectorHits);
+scene.add(...Object.values(detailMeshes), ...Object.values(detailMid), detailLegs, sectorHits);
 const helper = new THREE.Object3D();
 const yellowData = [];
 const blueData = [];
@@ -1349,9 +1356,19 @@ function applyDetail(mode, origin) {
   // В детальные меши попадают только реально помещённые места; остальные остаются простыми, чтобы не было «дыр».
   const placed = new Set();
   const counts = { yellow: 0, blue: 0, green: 0 };
+  const midCounts = { yellow: 0, blue: 0, green: 0 };
+  const nearSquared = nearDetailRadius * nearDetailRadius;
   let legs = 0;
   sectorRefs.length = 0;
   for (const seat of picked) {
+    if (mode === 'near' && seat.position.distanceToSquared(origin) >= nearSquared) {
+      // Среднее расстояние: упрощённая модель кресла.
+      if (midCounts[seat.group] >= detailCapacity) continue;
+      detailMid[seat.group].setMatrixAt(midCounts[seat.group]++, seat.matrix);
+      detailLegs.setMatrixAt(legs++, seat.matrix);
+      placed.add(seat);
+      continue;
+    }
     if (counts[seat.group] >= detailCapacity) continue;
     seat.detailIndex = counts[seat.group];
     detailMeshes[seat.group].setMatrixAt(counts[seat.group]++, seat.matrix);
@@ -1369,6 +1386,10 @@ function applyDetail(mode, origin) {
   }
   for (const [group, mesh] of Object.entries(detailMeshes)) {
     mesh.count = counts[group];
+    mesh.instanceMatrix.needsUpdate = true;
+  }
+  for (const [group, mesh] of Object.entries(detailMid)) {
+    mesh.count = midCounts[group];
     mesh.instanceMatrix.needsUpdate = true;
   }
   detailLegs.count = legs;
