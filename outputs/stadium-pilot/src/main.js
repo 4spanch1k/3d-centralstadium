@@ -1847,7 +1847,7 @@ if (!lowPower && new URLSearchParams(location.search).get('fx') !== '0') {
     ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 8 });
     instance.addPass(ao);
     // Свечение ламп, светодиодных лент и табло: только вечером и только на компьютерах.
-    bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.65, 0.55, 0.88);
+    bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.35, 0.45, 0.95);
     bloomPass.enabled = eveningMode;
     instance.addPass(bloomPass);
     instance.addPass(new OutputPass());
@@ -1988,7 +1988,7 @@ renderer.setAnimationLoop(() => {
 {
   const presets = {
     day: { sun: '#fff0d0', sunPower: 2.6, sunPosition: [-85, 140, -70], sky: '#f4f1e2', ground: '#4a5c5a', fill: 0.75, exposure: 1.05, env: 0.45, backdrop: 1, lamps: 0.6 },
-    evening: { sun: '#ff9f55', sunPower: 0.7, sunPosition: [-150, 38, -40], sky: '#8f9cc4', ground: '#3b3a4a', fill: 0.5, exposure: 0.95, env: 0.22, backdrop: 0.38, lamps: 2.4 },
+    evening: { sun: '#ff9f55', sunPower: 0.7, sunPosition: [-150, 38, -40], sky: '#8f9cc4', ground: '#3b3a4a', fill: 0.5, exposure: 0.95, env: 0.22, backdrop: 0.38, lamps: 1.1 },
   };
   // Прожекторы: четыре мачты по углам освещают поле и трибуны тёплым белым светом (только вечером, без теней).
   const fieldLights = [];
@@ -2029,7 +2029,7 @@ renderer.setAnimationLoop(() => {
   }
   const glowGeometry = new THREE.BufferGeometry();
   glowGeometry.setAttribute('position', new THREE.Float32BufferAttribute(glowPositions, 3));
-  const glow = new THREE.Points(glowGeometry, new THREE.PointsMaterial({ map: new THREE.CanvasTexture(glowCanvas), size: 4.2, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+  const glow = new THREE.Points(glowGeometry, new THREE.PointsMaterial({ map: new THREE.CanvasTexture(glowCanvas), size: 2.4, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
   glow.visible = false;
   scene.add(glow);
   let mode = 'day';
@@ -2050,11 +2050,11 @@ renderer.setAnimationLoop(() => {
     floodlights.material.emissiveIntensity = preset.lamps;
     eveningMode = mode === 'evening';
     for (const spot of fieldLights) spot.visible = eveningMode;
-    aoUniforms.uLightAmount.value = eveningMode ? 1.6 : 0;
-    for (const spot of fieldLights) spot.intensity = 12000;
+    aoUniforms.uLightAmount.value = eveningMode ? 0.9 : 0;
+    for (const spot of fieldLights) spot.intensity = 7000;
     if (bloomPass) bloomPass.enabled = eveningMode;
     glow.visible = mode === 'evening';
-    glow.material.opacity = mode === 'evening' ? 0.7 : 0;
+    glow.material.opacity = mode === 'evening' ? 0.4 : 0;
     renderer.shadowMap.needsUpdate = true;
   });
   document.body.appendChild(toggle);
