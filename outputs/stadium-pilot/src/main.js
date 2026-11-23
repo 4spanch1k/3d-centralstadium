@@ -1245,7 +1245,7 @@ function setView(name) {
   const target = name === 'overview' ? new THREE.Vector3(0, 4, 0) : new THREE.Vector3(...selected.target);
   const phone = window.innerWidth <= 700;
   // «Выбрать место»: камера плавно поднимается и смотрит на стадион почти строго сверху, чтобы были видны все сектора.
-  if (name === 'overview' && bookingOpen) moveCamera(new THREE.Vector3(0, phone ? 380 : 440, 58), target, phone ? 66 : 38, true, false, 1700);
+  if (name === 'overview' && bookingOpen) moveCamera(new THREE.Vector3(0, phone ? 380 : 375, 50), target, phone ? 66 : 38, true, false, 1700);
   else moveCamera(new THREE.Vector3(...selected.position), target, name === 'overview' ? (phone ? 66 : 38) : 50, name === 'overview');
   updateCameraFraming();
   updateSeatHighlights();
