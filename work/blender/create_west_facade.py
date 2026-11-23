@@ -3,14 +3,21 @@
 Собран по фотографии главного фасада (Wikimedia Commons, Ortalyq-Almaty_2022e, автор CD, CC BY-SA 4.0) как ориентиру пропорций; геометрия своя,
 размеры оценочные. Без логотипов, скульптур и надписей. Начало координат GLB уже в мировой точке сцены:
 фасад стоит снаружи западной трибуны (Three.js: x=0, z=-FACADE_Z), лицом наружу (-z Three.js = +Y Blender).
-Запуск: Blender -b -P create_west_facade.py
+Запуск: Blender -b -P work/blender/create_west_facade.py
+Для увеличенной чаши: Blender -b -P work/blender/create_west_facade.py -- --z 103 --preview
 """
+import argparse
+import sys
 import bpy, bmesh, math
 from pathlib import Path
 from mathutils import Matrix
 
 root = Path(__file__).resolve().parents[2]
-FACADE_Z = 88.0     # расстояние от центра поля до оси фасада (Three.js, м): за наружной стеной западной трибуны
+parser = argparse.ArgumentParser()
+parser.add_argument('--z', type=float, default=88.0)
+parser.add_argument('--preview', action='store_true')
+args = parser.parse_args(sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else [])
+FACADE_Z = args.z  # расстояние от центра поля до оси фасада в Three.js
 bpy.ops.wm.read_factory_settings(use_empty=True)
 
 mats, bms = {}, {}
@@ -105,7 +112,14 @@ for name, bm in bms.items():
 # Переносим в мировую точку: Three.js z = -FACADE_Z -> Blender y = +FACADE_Z; лицом наружу (+Y Blender).
 for obj in bpy.data.objects:
     obj.location = (0, FACADE_Z, 0)
-bpy.ops.wm.save_as_mainfile(filepath=str(root / 'work/blender/west-facade.blend'))
-bpy.ops.export_scene.gltf(filepath=str(root / 'outputs/stadium-pilot/public/west-facade.glb'), export_format='GLB')
+if args.preview:
+    blend_path = root / 'work/exports/west-facade-scaled.blend'
+    glb_path = root / 'work/exports/west-facade-scaled.glb'
+else:
+    blend_path = root / 'work/blender/west-facade.blend'
+    glb_path = root / 'outputs/stadium-pilot/public/west-facade.glb'
+bpy.context.preferences.filepaths.save_version = 0
+bpy.ops.wm.save_as_mainfile(filepath=str(blend_path))
+bpy.ops.export_scene.gltf(filepath=str(glb_path), export_format='GLB')
 tris = sum(sum(len(p.vertices) - 2 for p in o.data.polygons) for o in bpy.data.objects)
 print('Facade exported:', len(bpy.data.objects), 'objects,', tris, 'triangles')
