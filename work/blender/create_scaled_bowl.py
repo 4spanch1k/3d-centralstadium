@@ -3,7 +3,7 @@
 The field keeps its original dimensions. Only the bowl footprint and seat
 positions are scaled to 227 x 175 m; seat meshes and heights are not scaled.
 The intermediate landing, aisle steps, rails and exit frames follow the existing site geometry.
-The preview includes the west roof, east masts and repositioned west facade.
+The preview includes a field, running track, west roof, east masts and repositioned west facade.
 Seat directions follow the row tangent after scaling, including across gaps.
 Seat identifiers are copied from work/exports/seats.json, produced by
 window.__debug.exportSeats() on the development server. The number of rows and
@@ -38,13 +38,17 @@ bpy.ops.object.delete(use_global=False)
 
 concrete = bpy.data.materials.new('Concrete')
 concrete.diffuse_color = (0.58, 0.59, 0.57, 1)
+concrete.use_nodes = True
+concrete.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value = concrete.diffuse_color
 seat_material = bpy.data.materials.new('Seat')
 seat_material.diffuse_color = (0.04, 0.16, 0.43, 1)
+seat_material.use_nodes = True
+seat_material.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value = seat_material.diffuse_color
 seat_mesh.materials.clear()
 seat_mesh.materials.append(seat_material)
 
 
-def outline(half_x, half_y, radius, segments=12):
+def outline(half_x, half_y, radius, segments=12, scaled=True):
     corners = (
         ((half_x, half_y - radius), (half_x, half_y), (half_x - radius, half_y)),
         ((-half_x + radius, half_y), (-half_x, half_y), (-half_x, half_y - radius)),
@@ -57,8 +61,80 @@ def outline(half_x, half_y, radius, segments=12):
             t = i / segments
             x = (1 - t) ** 2 * start[0] + 2 * (1 - t) * t * control[0] + t ** 2 * end[0]
             y = (1 - t) ** 2 * start[1] + 2 * (1 - t) * t * control[1] + t ** 2 * end[1]
-            points.append((x * scale_x, y * scale_z))
+            points.append((x * scale_x, y * scale_z) if scaled else (x, y))
     return points
+
+
+# The playing field and track retain the site's dimensions; only the bowl scales.
+pitch_material = bpy.data.materials.new('Pitch')
+pitch_material.use_nodes = True
+pitch_material.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value = (0.08, 0.26, 0.08, 1)
+track_material = bpy.data.materials.new('Running track')
+track_material.use_nodes = True
+track_material.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value = (0.12, 0.23, 0.32, 1)
+white = bpy.data.materials.new('Field markings')
+white.use_nodes = True
+white.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value = (0.88, 0.9, 0.85, 1)
+
+ground_material = bpy.data.materials.new('Ground')
+ground_material.use_nodes = True
+ground_material.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value = (0.3, 0.33, 0.29, 1)
+ground_mesh = bpy.data.meshes.new('Ground')
+ground_mesh.from_pydata([(-125, -105, -0.2), (125, -105, -0.2),
+                         (125, 105, -0.2), (-125, 105, -0.2)], [], [(0, 1, 2, 3)])
+ground_mesh.materials.append(ground_material)
+bpy.context.collection.objects.link(bpy.data.objects.new('Ground', ground_mesh))
+
+pitch_mesh = bpy.data.meshes.new('Pitch')
+pitch_mesh.from_pydata([(-52.5, -34, 0.06), (52.5, -34, 0.06),
+                        (52.5, 34, 0.06), (-52.5, 34, 0.06)], [], [(0, 1, 2, 3)])
+pitch_mesh.materials.append(pitch_material)
+bpy.context.collection.objects.link(bpy.data.objects.new('Pitch', pitch_mesh))
+
+
+def flat_ring(mesh, outer_x, outer_y, inner_x, inner_y, radius, height):
+    outer = outline(outer_x, outer_y, radius, scaled=False)
+    inner = outline(inner_x, inner_y, radius - (outer_x - inner_x), scaled=False)
+    outside = [mesh.verts.new((x, y, height)) for x, y in outer]
+    inside = [mesh.verts.new((x, y, height)) for x, y in inner]
+    for i in range(len(outside)):
+        j = (i + 1) % len(outside)
+        mesh.faces.new((outside[i], outside[j], inside[j], inside[i]))
+
+track_mesh = bmesh.new()
+flat_ring(track_mesh, 65, 46, 54, 35, 26, 0.04)
+track_data = bpy.data.meshes.new('Running track')
+track_mesh.to_mesh(track_data)
+track_mesh.free()
+track_data.materials.append(track_material)
+bpy.context.collection.objects.link(bpy.data.objects.new('Running track', track_data))
+
+markings = bmesh.new()
+for lane in range(9):
+    offset = lane * 1.22
+    flat_ring(markings, 55 + offset, 36 + offset, 54.94 + offset, 35.94 + offset, 16 + offset, 0.07)
+for x1, y1, x2, y2 in ((-52.5, -34, 52.5, -34), (-52.5, 34, 52.5, 34),
+                       (-52.5, -34, -52.5, 34), (52.5, -34, 52.5, 34), (0, -34, 0, 34),
+                       (-52.5, -20, -36, -20), (-36, -20, -36, 20), (-36, 20, -52.5, 20),
+                       (52.5, -20, 36, -20), (36, -20, 36, 20), (36, 20, 52.5, 20),
+                       (-52.5, -9, -47, -9), (-47, -9, -47, 9), (-47, 9, -52.5, 9),
+                       (52.5, -9, 47, -9), (47, -9, 47, 9), (47, 9, 52.5, 9)):
+    dx, dy = x2 - x1, y2 - y1
+    length = math.hypot(dx, dy)
+    nx, ny = -dy / length * 0.09, dx / length * 0.09
+    corners = [markings.verts.new((x, y, 0.12)) for x, y in
+               ((x1 + nx, y1 + ny), (x1 - nx, y1 - ny), (x2 - nx, y2 - ny), (x2 + nx, y2 + ny))]
+    markings.faces.new(corners)
+for i in range(64):
+    a, b = 2 * math.pi * i / 64, 2 * math.pi * (i + 1) / 64
+    corners = [markings.verts.new((r * math.cos(angle), r * math.sin(angle), 0.12))
+               for r, angle in ((9, a), (9.16, a), (9.16, b), (9, b))]
+    markings.faces.new(corners)
+marking_mesh = bpy.data.meshes.new('Pitch and lane markings')
+markings.to_mesh(marking_mesh)
+markings.free()
+marking_mesh.materials.append(white)
+bpy.context.collection.objects.link(bpy.data.objects.new('Pitch and lane markings', marking_mesh))
 
 
 vertices, faces = [], []
