@@ -143,12 +143,12 @@ const aoUniforms = {
   uAoRect: { value: new THREE.Vector4(-112, -96, 224, 192) },
   uAoStrength: { value: 0.6 },
 };
-function weather(surface, { stains = true } = {}) {
+function weather(surface, { stains = true, ao = 0.6 } = {}) {
   surface.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, aoUniforms);
+    Object.assign(shader.uniforms, aoUniforms, { uAoStrength: { value: ao } });
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vWeatherPos;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWeatherPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\n#ifdef USE_INSTANCING\nvWeatherPos = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;\n#else\nvWeatherPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\n#endif');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
 varying vec3 vWeatherPos;
@@ -169,7 +169,10 @@ diffuseColor.rgb *= mix(0.72, 1.08, stain);
 diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.86, 0.9, 0.84), smoothstep(0.55, 0.8, wNoise(vWeatherPos * 0.9)));`}
 vec2 aoUv = vec2((vWeatherPos.x - uAoRect.x) / uAoRect.z, 1.0 - (vWeatherPos.z - uAoRect.y) / uAoRect.w);
 float bakedAo = texture2D(uAoMap, aoUv).r;
-diffuseColor.rgb *= mix(1.0, bakedAo, uAoStrength);`);
+diffuseColor.rgb *= mix(1.0, bakedAo, uAoStrength);
+// Вертикальные грани (подступенки) темнее горизонтальных: ступени читаются как ступени.
+vec3 faceNormal = normalize(cross(dFdx(vWeatherPos), dFdy(vWeatherPos)));
+diffuseColor.rgb *= mix(0.8, 1.0, smoothstep(0.25, 0.75, abs(faceNormal.y)));`);
   };
   surface.needsUpdate = true;
 }
@@ -187,6 +190,8 @@ const white = material('#e8ead9');
 const yellowSeats = material('#e0a617', 0.5);
 const blueSeats = material('#1f5fa8', 0.5);
 const greenSeats = material('#2f8f6a', 0.5);
+// Кресла тоже получают запечённое затенение по месту установки (слабее, чтобы не считать тень кресла дважды).
+for (const seatMaterial of [yellowSeats, blueSeats, greenSeats]) weather(seatMaterial, { stains: false, ao: 0.35 });
 const steel = material('#d8dbd2', 0.55);
 
 const buildingRoofs = [];
