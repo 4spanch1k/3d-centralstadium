@@ -138,3 +138,5 @@ ffmpeg -i outputs/stadium-pilot/public/stadium-orbit-mobile.mp4 -an -c:v libvpx-
 Для приближённых габаритов чаши 227 × 175 м подготовлен отдельный Blender-предпросмотр `work/blender/create_scaled_bowl.py` на основе локального экспорта мест; на сайте остаётся прежняя чаша до интеграции. Данные размеров — ориентиры из предоставленного исследования OpenStreetMap, фактические места и ряды не обмерены. Порядок интеграции и параметры карты затенения описаны в `work/stadium-geometry-handoff.md`. Новые модели созданы для проекта, сторонние модели не использованы.
 
 HDR-небо в режиме качества (компьютеры): `sky-2k.hdr`, Poly Haven, Kloppenheim 05 Pure Sky 2k, CC0 — https://polyhaven.com/a/kloppenheim_05_puresky. На телефонах и в режиме `?quality=fast` остаётся лёгкий `sky.hdr` 1k.
+
+Фактура газона (нормали и шероховатость, компьютеры): ambientCG, Grass004, CC0 — https://ambientcg.com/view?id=Grass004. Исходники 1k лежат в `work/textures/grass004`.

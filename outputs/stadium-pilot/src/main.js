@@ -121,6 +121,20 @@ grassTexture.wrapT = THREE.RepeatWrapping;
 grassTexture.repeat.set(25, 16);
 grassTexture.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
 const grass = new THREE.MeshStandardMaterial({ map: grassTexture, roughness: 1 });
+// Газон: ambientCG Grass004 (CC0) — нормали и шероховатость только на компьютерах.
+if (!lowPower) {
+  const grassDetail = (file) => {
+    const texture = new THREE.TextureLoader().load(asset(file), undefined, undefined, (error) => console.error('Не удалось загрузить фактуру газона', file, error));
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(70, 45);
+    texture.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
+    return texture;
+  };
+  grass.normalMap = grassDetail('grass-normal.webp');
+  grass.normalScale.set(0.7, 0.7);
+  grass.roughnessMap = grassDetail('grass-rough.webp');
+}
 // Бетон: Poly Haven «Damaged Concrete Floor» (CC0) — цвет, нормали и шероховатость; на телефонах только цвет.
 const textureLoader = new THREE.TextureLoader();
 function concreteMap(file, color = false) {
