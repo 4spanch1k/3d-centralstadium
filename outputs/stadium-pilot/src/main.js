@@ -191,12 +191,16 @@ trackNormal.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
 const track = new THREE.MeshStandardMaterial({ color: '#405a70', roughness: 0.95, normalMap: trackNormal, normalScale: new THREE.Vector2(0.5, 0.5) });
 weather(track, { stains: false });
 const white = material('#e8ead9');
-const yellowSeats = material('#e0a617', 0.5);
-const blueSeats = material('#1f5fa8', 0.5);
-const greenSeats = material('#2f8f6a', 0.5);
+// Пластик кресел: на компьютерах с глянцевым лаковым слоем, ловит отражения неба.
+const seatMaterial = (color) => (qualityMax
+  ? new THREE.MeshPhysicalMaterial({ color, roughness: 0.42, clearcoat: 0.45, clearcoatRoughness: 0.28 })
+  : material(color, 0.5));
+const yellowSeats = seatMaterial('#e0a617');
+const blueSeats = seatMaterial('#1f5fa8');
+const greenSeats = seatMaterial('#2f8f6a');
 // Кресла тоже получают запечённое затенение по месту установки (слабее, чтобы не считать тень кресла дважды).
 for (const seatMaterial of [yellowSeats, blueSeats, greenSeats]) weather(seatMaterial, { stains: false, ao: 0.35 });
-const steel = material('#d8dbd2', 0.55);
+const steel = qualityMax ? new THREE.MeshStandardMaterial({ color: '#d8dbd2', roughness: 0.38, metalness: 0.7 }) : material('#d8dbd2', 0.55);
 
 const buildingRoofs = [];
 const buildingWalls = [];
