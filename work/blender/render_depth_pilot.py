@@ -1,7 +1,7 @@
 """Пилот панорам с Z-pass для сектора 9. Сохраняет результаты только в work/exports.
 
 Blender -b -P work/blender/render_depth_pilot.py -- --limit 1 --samples 24
-Цвет: PNG, глубина: PNG16 (метры = значение * 200/65534, 65535 = нет пересечения).
+Цвет: WebP, глубина: PNG16 (метры = значение * 200/65534, 65535 = нет пересечения).
 Нужна визуальная проверка и проверка репроекции до использования на сайте.
 """
 import argparse
@@ -30,6 +30,13 @@ if not nodes:
 bpy.ops.wm.read_factory_settings(use_empty=True)
 bpy.ops.import_scene.gltf(filepath=str(root / 'work/exports/stadium-scene.glb'))
 scene = bpy.context.scene
+tree_material = bpy.data.materials.new('Tree crowns')
+tree_material.use_nodes = True
+tree_material.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value = (0.07, 0.18, 0.05, 1)
+for obj in scene.objects:
+    if obj.type == 'MESH' and obj.name.split('.')[0] == 'Mesh_4':
+        obj.data.materials.clear()
+        obj.data.materials.append(tree_material)
 world = bpy.data.worlds.new('Sky')
 world.use_nodes = True
 scene.world = world
