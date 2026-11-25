@@ -48,7 +48,7 @@ def save_png(path, ids):
         return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data) & 0xffffffff)
     path.write_bytes(b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(data, 9)) + chunk(b'IEND', b''))
 
-for name, width, height, z, fov, radius in [('desktop', 2560, 1440, 375, 38, 22), ('phone', 1170, 1700, 380, 54, 18)]:
+for name, width, height, z, fov, radius in [('desktop', 2560, 1440, 375, 38, 16), ('phone', 1170, 1700, 380, 54, 13)]:
     scene.render.resolution_x, scene.render.resolution_y = width, height
     scene.render.resolution_percentage = 100
     camera.location = (0, -50, z)
