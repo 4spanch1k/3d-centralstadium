@@ -12,6 +12,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--frame', type=int)
 parser.add_argument('--samples', type=int, default=16)
 parser.add_argument('--width', type=int, default=1280)
+parser.add_argument('--portrait', action='store_true')
 parser.add_argument('--radius', type=float, default=245)
 parser.add_argument('--height', type=float, default=145)
 parser.add_argument('--out', default='orbit-frames')
@@ -46,7 +47,9 @@ sun.rotation_euler = (-Vector((-85, 70, 140))).to_track_quat('-Z', 'Y').to_euler
 camera = bpy.data.objects.new('Orbit camera', bpy.data.cameras.new('Orbit camera'))
 scene.collection.objects.link(camera)
 scene.camera = camera
-camera.data.lens = 36
+camera.data.lens = 32 if args.portrait else 36
+if args.portrait:
+    camera.data.sensor_fit = 'HORIZONTAL'
 scene.frame_start = 1
 scene.frame_end = 144
 scene.render.fps = 24
@@ -73,7 +76,7 @@ except (AttributeError, TypeError, RuntimeError) as error:
     print('Metal unavailable:', error)
 scene.view_settings.view_transform = 'AgX'
 scene.render.resolution_x = args.width
-scene.render.resolution_y = args.width * 9 // 16
+scene.render.resolution_y = args.width * 16 // 9 if args.portrait else args.width * 9 // 16
 scene.render.resolution_percentage = 100
 scene.render.image_settings.file_format = 'PNG'
 output = root / 'work/exports' / args.out
