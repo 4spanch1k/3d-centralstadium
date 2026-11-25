@@ -4,10 +4,12 @@
 Перед запуском должны быть созданы depth-pilot и depth-pilot-reference. Это
 простейшее отображение ближайшего пикселя с Z-буфером, без заполнения дыр.
 """
+import argparse
 import json
 import math
 import struct
 import subprocess
+import sys
 import zlib
 from pathlib import Path
 
@@ -18,8 +20,15 @@ source_dir = root / 'work/exports/depth-pilot'
 reference_dir = root / 'work/exports/depth-pilot-reference'
 out = root / 'work/exports/depth-pilot-comparison'
 out.mkdir(parents=True, exist_ok=True)
+parser = argparse.ArgumentParser()
+parser.add_argument('--selftest', action='store_true')
+args = parser.parse_args(sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else [])
 source = json.loads((source_dir / 'test-index.json').read_text())[0]
-references = json.loads((reference_dir / 'test-index.json').read_text())
+if args.selftest:
+    reference_dir = source_dir
+    references = [{**source, 'actualOffset': 0}]
+else:
+    references = json.loads((reference_dir / 'test-index.json').read_text())
 
 def depth_png(path):
     data = path.read_bytes()
@@ -114,4 +123,4 @@ for target in references:
     save_png(out / (target['id'] + '-reprojected.png'), projected)
     results.append(result)
     print(json.dumps(result, ensure_ascii=False), flush=True)
-(out / 'metrics.json').write_text(json.dumps(results, ensure_ascii=False, indent=2) + '\n')
+(out / ('metrics-selftest.json' if args.selftest else 'metrics.json')).write_text(json.dumps(results, ensure_ascii=False, indent=2) + '\n')
