@@ -9,6 +9,7 @@ import math
 import struct
 import sys
 import zlib
+from collections import defaultdict
 from pathlib import Path
 
 import bpy
@@ -76,6 +77,25 @@ for name, width, height, z, fov, radius in [('desktop', 2560, 1440, 375, 38, 22)
         px, py = int(round(x)), int(round(y))
         if not (0 <= px < width and 0 <= py < height) or ids[py, px] != seat['sector']:
             mismatches += 1
+    # Проверяем именно целочисленную маску, без преобразования цвета и сглаживания.
+    pixels = ids.astype(np.uint8).tobytes()
+    seen = bytearray(width * height)
+    components = defaultdict(int)
+    for index, number in enumerate(pixels):
+        if not number or seen[index]:
+            continue
+        components[number] += 1
+        seen[index] = 1
+        stack = [index]
+        while stack:
+            current = stack.pop()
+            for other in (current - width, current + width, current - 1, current + 1):
+                if (0 <= other < len(pixels) and not seen[other] and pixels[other] == number
+                        and (abs(other - current) == width or other // width == current // width)):
+                    seen[other] = 1
+                    stack.append(other)
+    if set(components) != set(sectors) or any(count != 1 for count in components.values()):
+        raise ValueError(f'{name}: несвязные или отсутствующие сектора: {dict(components)}')
     for number, sector in sectors.items():
         ys, xs = np.where(ids == number)
         if not len(xs):
@@ -87,7 +107,7 @@ for name, width, height, z, fov, radius in [('desktop', 2560, 1440, 375, 38, 22)
     if mismatches:
         raise ValueError(f'{name}: {mismatches} мест не совпали с маской')
     save_png(out / f'plan-{name}-id.png', ids)
-    print(name, 'sectors', len(np.unique(ids)) - 1, 'seat mismatches', mismatches, 'of', len(seats), flush=True)
+    print(name, 'sectors', len(components), 'each connected; seat mismatches', mismatches, 'of', len(seats), flush=True)
 
 (out / 'sectors.json').write_text(json.dumps({
     'version': 1,
