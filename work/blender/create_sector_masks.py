@@ -1,4 +1,4 @@
-"""Черновые маски секторов по координатам кресел для проверки соответствия плану.
+"""Маски секторов по координатам кресел для проверки соответствия плану.
 
 Запуск: Blender -b -P work/blender/create_sector_masks.py -- --out work/exports/sector-mask-test
 Маска хранит номер сектора в красном и зелёном канале. Кадры должны использовать камеру render_sector_plan.py.
@@ -9,7 +9,6 @@ import math
 import struct
 import sys
 import zlib
-from collections import defaultdict
 from pathlib import Path
 
 import bpy
@@ -24,6 +23,12 @@ root = Path(__file__).resolve().parents[2]
 out = Path(args.out).resolve()
 out.mkdir(parents=True, exist_ok=True)
 seats = json.loads((root / 'work/exports/seats-full.json').read_text())
+sectors = {}
+for seat in seats:
+    number = seat['sector']
+    if number not in sectors:
+        sectors[number] = {'number': number, 'stand': seat['stand'], 'label': f'Сектор {number}', 'seatCount': 0}
+    sectors[number]['seatCount'] += 1
 bpy.ops.wm.read_factory_settings(use_empty=True)
 scene = bpy.context.scene
 camera = bpy.data.objects.new('Plan camera', bpy.data.cameras.new('Plan camera'))
@@ -71,5 +76,23 @@ for name, width, height, z, fov, radius in [('desktop', 2560, 1440, 375, 38, 22)
         px, py = int(round(x)), int(round(y))
         if not (0 <= px < width and 0 <= py < height) or ids[py, px] != seat['sector']:
             mismatches += 1
+    for number, sector in sectors.items():
+        ys, xs = np.where(ids == number)
+        if not len(xs):
+            raise ValueError(f'Нет пикселей сектора {number} на плане {name}')
+        sector[name] = {
+            'center': [round(float(xs.mean()), 2), round(float(ys.mean()), 2)],
+            'bounds': [int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1],
+        }
+    if mismatches:
+        raise ValueError(f'{name}: {mismatches} мест не совпали с маской')
     save_png(out / f'plan-{name}-id.png', ids)
     print(name, 'sectors', len(np.unique(ids)) - 1, 'seat mismatches', mismatches, 'of', len(seats), flush=True)
+
+(out / 'sectors.json').write_text(json.dumps({
+    'version': 1,
+    'maskEncoding': 'sector = R + 256 * G; 0 = background',
+    'boundsFormat': '[left, top, right, bottom), pixels from top left',
+    'sizes': {'desktop': [2560, 1440], 'phone': [1170, 1700]},
+    'sectors': [sectors[number] for number in sorted(sectors)],
+}, ensure_ascii=False, indent=2) + '\n')
