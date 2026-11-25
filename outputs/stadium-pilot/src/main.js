@@ -972,6 +972,13 @@ function planHover(sector) {
     hoverClearTimer = setTimeout(() => { hoverClearTimer = 0; hoverSector(null); markDirty(); }, 260);
   }
 }
+// Подпись у курсора или пальца всегда целиком внутри экрана.
+function placeTip(x, y) {
+  seatTip.hidden = false;
+  const width = seatTip.offsetWidth;
+  seatTip.style.left = `${Math.max(8, Math.min(window.innerWidth - width - 8, x))}px`;
+  seatTip.style.top = `${Math.max(70, Math.min(window.innerHeight - 50, y))}px`;
+}
 // Готовый план (картинка + маска) вместо живых плиток на телефонах и слабых устройствах; ?plan=live или ?plan=img задаёт режим вручную.
 const planParam = new URLSearchParams(location.search).get('plan');
 const usePlanImage = planParam === 'img' || (planParam !== 'live' && (lowPower || window.innerWidth <= 700 || matchMedia('(pointer: coarse)').matches));
@@ -984,18 +991,14 @@ planLayer = usePlanImage ? createPlanLayer({
     if (sector === null) { seatTip.hidden = true; planHover(null); return; }
     planHover(sector);
     seatTip.textContent = `${standNames[info.stand]} · сектор ${sector} · ${info.seatCount} мест`;
-    seatTip.style.left = `${event.clientX + 14}px`;
-    seatTip.style.top = `${event.clientY + 14}px`;
-    seatTip.hidden = false;
+    placeTip(event.clientX + 14, event.clientY + 14);
   },
   onPick: (sector, event, info) => {
     // На сенсорном экране первое касание подсвечивает сектор и показывает подпись, второе открывает его.
     if (event.pointerType === 'touch' && hoveredSector !== sector) {
       planHover(sector);
       seatTip.textContent = `${standNames[info.stand]} · сектор ${sector} · ${info.seatCount} мест`;
-      seatTip.style.left = `${Math.min(window.innerWidth - 150, Math.max(10, event.clientX - 70))}px`;
-      seatTip.style.top = `${Math.max(70, event.clientY - 54)}px`;
-      seatTip.hidden = false;
+      placeTip(event.clientX - 70, event.clientY - 54);
       return;
     }
     seatTip.hidden = true;
