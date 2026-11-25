@@ -814,7 +814,8 @@ for (let row = 0; row < rows; row += 1) {
       : (point.y > 0 ? 'west' : 'east');
     if (stand === 'east' && (row === 13 || row === 14)) continue;
     if (stand === 'west' && Math.abs(point.x) < 12.5 * bowlScaleX && point.y > 72.5 * bowlScaleZ) continue;
-    const seat = { stand, row: row + 1, position: helper.position.clone(), matrix: helper.matrix.clone() };
+    // rowIndex (0–33, физический ряд) и pathIndex (0–799, позиция вдоль ряда) нужны для карт света и экспорта; row потом переназначается для верхних ярусов.
+    const seat = { stand, row: row + 1, rowIndex: row, pathIndex: i, position: helper.position.clone(), matrix: helper.matrix.clone() };
     seatHits.setMatrixAt(seats.length, helper.matrix);
     seats.push(seat);
     if ((stand === 'east' && row < 13) || (stand === 'south' && Math.floor(i / 16) % 2 === 0)) {
@@ -1971,7 +1972,14 @@ if (location.search.includes('debug')) {
   window.__debug.exportSeats = async () => {
     const list = seats.filter((seat) => !seat.hidden && seat.sector).map((seat) => [seat.stand, seat.sector, seat.row, seat.number, +seat.position.x.toFixed(2), +(seat.position.y + 1).toFixed(2), +seat.position.z.toFixed(2)]);
     const response = await fetch('/__save?name=seats.json', { method: 'POST', body: JSON.stringify(list) });
-    return { seats: list.length, bytes: Number(await response.text()) };
+    // Расширенный экспорт: объекты с физическим рядом и позицией вдоль ряда (для карт света 800×34) и группой цвета; y — высота глаз (позиция сиденья + 1 м).
+    const full = seats.filter((seat) => !seat.hidden && seat.sector).map((seat) => ({
+      stand: seat.stand, sector: seat.sector, row: seat.row, number: seat.number,
+      x: +seat.position.x.toFixed(2), y: +(seat.position.y + 1).toFixed(2), z: +seat.position.z.toFixed(2),
+      rowIndex: seat.rowIndex, pathIndex: seat.pathIndex, group: seat.group,
+    }));
+    const fullResponse = await fetch('/__save?name=seats-full.json', { method: 'POST', body: JSON.stringify(full) });
+    return { seats: list.length, bytes: Number(await response.text()), fullBytes: Number(await fullResponse.text()) };
   };
   window.__debug.exportScene = async (name = 'stadium-scene.glb') => {
     const { GLTFExporter } = await import('three/addons/exporters/GLTFExporter.js');
