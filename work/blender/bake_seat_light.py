@@ -79,7 +79,10 @@ for i, seat in enumerate(seats):
     position = Vector((seat['x'], -seat['z'], seat['y'] - 1))
     row, path = seat['rowIndex'], seat['pathIndex']
     images['seat'][row, path] = light_sample(position + Vector((0, 0, 0.2)))
-    images['concrete'][row, path] = light_sample(position + Vector((0, 0, -0.2)))
+    # Проба бетона смещена вдоль ряда от центра кресла, на 3 см над верхом ступени.
+    outward = Vector((position.x, position.y, 0)).normalized()
+    tangent = Vector((-outward.y, outward.x, 0))
+    images['concrete'][row, path] = light_sample(position + 0.36 * tangent + Vector((0, 0, -0.24)))
     if (i + 1) % 100 == 0:
         print(f'{i + 1}/{len(seats)} seats, {time.monotonic() - started:.1f}s', flush=True)
 mode = 'evening' if args.evening else 'day'
