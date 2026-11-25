@@ -24,13 +24,16 @@ parser.add_argument('--seats', required=True)
 parser.add_argument('--out', required=True)
 parser.add_argument('--samples', type=int, default=16)
 parser.add_argument('--evening', action='store_true')
+parser.add_argument('--all', action='store_true')
+parser.add_argument('--direct-only', action='store_true')
 args = parser.parse_args(sys.argv[sys.argv.index('--') + 1:])
 if args.samples < 1:
     raise ValueError('--samples должно быть больше нуля')
 out = Path(args.out).resolve()
 out.mkdir(parents=True, exist_ok=True)
 seats = json.loads(Path(args.seats).read_text())
-seats = [s for s in seats if (s['stand'], s['sector']) in {('west', 9), ('east', 46)}]
+if not args.all:
+    seats = [s for s in seats if (s['stand'], s['sector']) in {('west', 9), ('east', 46)}]
 if not seats:
     raise ValueError('В выгрузке нет мест пилотных секторов 9 и 46')
 bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -52,8 +55,9 @@ def visible(origin, direction, distance):
     return not hit
 
 def light_sample(origin):
-    sky = sum(visible(origin, direction, 200) for direction in directions) / len(directions)
-    local = sum(visible(origin, direction, 1) for direction in directions) / len(directions)
+    if not args.direct_only:
+        sky = sum(visible(origin, direction, 200) for direction in directions) / len(directions)
+        local = sum(visible(origin, direction, 1) for direction in directions) / len(directions)
     if args.evening:
         values = []
         for mast in masts:
@@ -63,6 +67,9 @@ def light_sample(origin):
         direct = min(1, sum(values) * 1500)
     else:
         direct = float(visible(origin, sun, 500))
+    if args.direct_only:
+        value = round(255 * direct)
+        return [value, value, value, 255]
     return [round(255 * direct), round(255 * sky), round(255 * local), 255]
 
 def write_png(path, image):

@@ -19,10 +19,15 @@ parser.add_argument('--surface', choices=('seat', 'concrete'), default='seat')
 parser.add_argument('--stand', choices=('west', 'east'), default='west')
 parser.add_argument('--sector', type=int, default=9)
 parser.add_argument('--samples', type=int, default=64)
+parser.add_argument('--all', action='store_true')
 args = parser.parse_args(sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else [])
 out = root / 'work/exports/seat-light-pilot'
 out.mkdir(parents=True, exist_ok=True)
-seats = [s for s in json.loads((root / 'work/exports/seats-full.json').read_text()) if s['stand'] == args.stand and s['sector'] == args.sector]
+seats = json.loads((root / 'work/exports/seats-full.json').read_text())
+if not args.all:
+    seats = [s for s in seats if s['stand'] == args.stand and s['sector'] == args.sector]
+if len({(s['rowIndex'], s['pathIndex']) for s in seats}) != len(seats):
+    raise ValueError('Индексы мест должны быть уникальны')
 if not seats:
     raise ValueError('В указанном секторе нет мест')
 bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -77,7 +82,8 @@ scene.render.bake.margin = 0
 scene.render.bake.use_clear = True
 started = time.monotonic()
 bpy.ops.object.bake(type='AO')
-image.filepath_raw = str(out / f'{args.surface}-{args.stand}-{args.sector}-cycles-ao-linear.png')
+name = 'all' if args.all else f'{args.stand}-{args.sector}'
+image.filepath_raw = str(out / f'{args.surface}-{name}-cycles-ao-linear.png')
 image.file_format = 'PNG'
 image.save()
 print(f'Cycles AO: {len(seats)} probes, {args.samples} samples, {time.monotonic() - started:.1f}s, {image.filepath_raw}', flush=True)

@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "status": "experimental-do-not-enable",
+  "dimensions": [
+    800,
+    34
+  ],
+  "index": "x=pathIndex; y=rowIndex from image top",
+  "encoding": "Non-Color linear RGBA8, use nearest; R=ambient occlusion visibility, A=valid",
+  "coverage": {
+    "seats": 24323,
+    "sectors": 57
+  },
+  "missing": "A=0 means no sample: multiplier 1",
+  "files": {
+    "seat-ao.png": {
+      "bytes": 22329,
+      "sha256": "b244a6670ffb12da3806bf9439148fb58a49e0863217feb396c8dcb995a48de1"
+    },
+    "concrete-ao.png": {
+      "bytes": 28419,
+      "sha256": "2d3c4061335a476664abeeb3f562f53d32fce20c9f30b524db576e04968cf01d"
+    }
+  },
+  "caveats": [
+    "AO only, not direct sunlight or evening lights",
+    "concrete placement and sector seams not fully validated",
+    "do not enable before visual validation"
+  ]
+}
