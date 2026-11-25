@@ -1,3 +1,4 @@
+import { createPlanLayer } from './planLayer.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -944,9 +945,11 @@ scene.add(sectorPlan);
 const planColors = sectorPlan.instanceColor.array;
 const planBase = planColors.slice();
 let hoveredSector = null;
+let planLayer = null;
 function hoverSector(sector) {
   if (sector === hoveredSector) return;
   hoveredSector = sector;
+  if (planLayer) planLayer.highlight(sector);
   if (sector === null) planColors.set(planBase);
   else {
     for (let i = 0; i < planColors.length; i += 1) planColors[i] = planBase[i] * 0.38;
@@ -969,6 +972,36 @@ function planHover(sector) {
     hoverClearTimer = setTimeout(() => { hoverClearTimer = 0; hoverSector(null); markDirty(); }, 260);
   }
 }
+// Готовый план (картинка + маска) вместо живых плиток на телефонах и слабых устройствах; ?plan=live или ?plan=img задаёт режим вручную.
+const planParam = new URLSearchParams(location.search).get('plan');
+const usePlanImage = planParam === 'img' || (planParam !== 'live' && (lowPower || window.innerWidth <= 700 || matchMedia('(pointer: coarse)').matches));
+planLayer = usePlanImage ? createPlanLayer({
+  asset,
+  getArea: () => (window.innerWidth <= 700
+    ? { x: 0, y: 56, width: window.innerWidth, height: Math.max(180, window.innerHeight * 0.54 - 56) }
+    : { x: 0, y: 70, width: Math.max(300, window.innerWidth - 392), height: window.innerHeight - 70 }),
+  onHover: (sector, event, info) => {
+    if (sector === null) { seatTip.hidden = true; planHover(null); return; }
+    planHover(sector);
+    seatTip.textContent = `${standNames[info.stand]} · сектор ${sector} · ${info.seatCount} мест`;
+    seatTip.style.left = `${event.clientX + 14}px`;
+    seatTip.style.top = `${event.clientY + 14}px`;
+    seatTip.hidden = false;
+  },
+  onPick: (sector, event, info) => {
+    // На сенсорном экране первое касание подсвечивает сектор и показывает подпись, второе открывает его.
+    if (event.pointerType === 'touch' && hoveredSector !== sector) {
+      planHover(sector);
+      seatTip.textContent = `${standNames[info.stand]} · сектор ${sector} · ${info.seatCount} мест`;
+      seatTip.style.left = `${Math.min(window.innerWidth - 150, Math.max(10, event.clientX - 70))}px`;
+      seatTip.style.top = `${Math.max(70, event.clientY - 54)}px`;
+      seatTip.hidden = false;
+      return;
+    }
+    seatTip.hidden = true;
+    pickSector(info.stand, sector);
+  },
+}) : null;
 // Таблички с номерами секторов над верхним рядом каждого сектора (положение ориентировочное).
 {
   const topBySector = new Map();
@@ -1324,6 +1357,13 @@ function lookFromSeat() {
 function updatePlan() {
   sectorPlan.visible = bookingOpen && view === 'overview' && stage === 'stand';
   if (!sectorPlan.visible) hoverSector(null);
+  if (planLayer) {
+    // Готовый план показывается поверх сцены; если он не загрузился, остаются живые плитки.
+    if (sectorPlan.visible) {
+      sectorPlan.material.visible = false;
+      planLayer.show().then((ok) => { if (ok === false) sectorPlan.material.visible = true; });
+    } else planLayer.hide();
+  }
   // Крыша убирается, чтобы под ней были видны сектора западной трибуны.
   if (roofModel) roofModel.visible = !sectorPlan.visible;
   roofLights.visible = !sectorPlan.visible;
@@ -1968,7 +2008,8 @@ if (!initialHash && !matchMedia('(prefers-reduced-motion: reduce)').matches && !
   document.addEventListener('pointerdown', stopIntro, { once: true, capture: true });
   document.addEventListener('keydown', stopIntro, { once: true, capture: true });
   window.addEventListener('hashchange', stopIntro, { once: true });
-  const size = lowPower || window.innerWidth <= 700 ? 'mobile' : 'desktop';
+  const size = lowPower || window.innerWidth <= 700 ? 'phone' : 'desktop';
+  introVideo.poster = asset(`intro-${size}.jpg`);
   const format = introVideo.canPlayType('video/webm; codecs="vp9"') ? 'webm' : 'mp4';
   introVideo.src = asset(`stadium-orbit-${size}.${format}`);
   introVideo.play().then(() => {
