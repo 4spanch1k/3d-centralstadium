@@ -64,7 +64,10 @@ bpy.context.view_layer.use_pass_z = True
 scene.use_nodes = True
 tree = bpy.data.node_groups.new('Depth pass', 'CompositorNodeTree')
 scene.compositing_node_group = tree
+tree.interface.new_socket(name='Image', in_out='OUTPUT', socket_type='NodeSocketColor')
 source = tree.nodes.new('CompositorNodeRLayers')
+output = tree.nodes.new('NodeGroupOutput')
+tree.links.new(source.outputs['Image'], output.inputs['Image'])
 depth = tree.nodes.new('CompositorNodeOutputFile')
 depth.directory = str(out)
 depth.file_output_items.new('FLOAT', 'Depth')
