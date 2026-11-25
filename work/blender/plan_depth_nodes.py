@@ -32,3 +32,13 @@ out = root / 'work/exports/depth-pilot/nodes.json'
 out.parent.mkdir(parents=True, exist_ok=True)
 out.write_text(json.dumps(nodes, ensure_ascii=False, indent=2) + '\n')
 print(f'{len(nodes)} узлов для {sum(n["seats"] for n in nodes)} мест; макс. смещение {max(n["maxOffset"] for n in nodes):.2f} м')
+first = nodes[0]
+sector_seats = [s for s in seats if s['stand'] == 'west' and s['sector'] == 9]
+references = []
+for wanted in (1, 2, 3):
+    seat = min(sector_seats, key=lambda s: abs(math.dist(first['position'], [s['x'], s['y'], s['z']]) - wanted))
+    position = [seat['x'], seat['y'], seat['z']]
+    references.append({'id': f'west-9-reference-{wanted}m', 'stand': 'west', 'sector': 9,
+                       'row': seat['row'], 'number': seat['number'], 'position': position,
+                       'actualOffset': round(math.dist(first['position'], position), 3)})
+(out.parent / 'reference-nodes.json').write_text(json.dumps(references, ensure_ascii=False, indent=2) + '\n')

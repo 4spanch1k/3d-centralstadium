@@ -21,10 +21,13 @@ from mathutils import Vector
 parser = argparse.ArgumentParser()
 parser.add_argument('--limit', type=int, default=1)
 parser.add_argument('--samples', type=int, default=24)
+parser.add_argument('--nodes', default='work/exports/depth-pilot/nodes.json')
+parser.add_argument('--out', default='work/exports/depth-pilot')
 args = parser.parse_args(sys.argv[sys.argv.index('--') + 1:])
 root = Path(__file__).resolve().parents[2]
-out = root / 'work/exports/depth-pilot'
-nodes = json.loads((out / 'nodes.json').read_text())[:args.limit]
+out = root / args.out
+out.mkdir(parents=True, exist_ok=True)
+nodes = json.loads((root / args.nodes).read_text())[:args.limit]
 if not nodes:
     raise ValueError('Нет запланированных точек')
 bpy.ops.wm.read_factory_settings(use_empty=True)
