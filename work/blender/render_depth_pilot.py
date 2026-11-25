@@ -68,6 +68,7 @@ source = tree.nodes.new('CompositorNodeRLayers')
 depth = tree.nodes.new('CompositorNodeOutputFile')
 depth.directory = str(out)
 depth.file_output_items.new('FLOAT', 'Depth')
+depth.format.media_type = 'IMAGE'
 depth.format.file_format = 'OPEN_EXR'
 depth.format.color_mode = 'BW'
 depth.format.color_depth = '32'
@@ -94,6 +95,7 @@ for node in nodes:
     if len(candidates) != 1:
         raise RuntimeError(f'Ожидался один EXR для {node["id"]}, найдено {len(candidates)}')
     image = bpy.data.images.load(str(candidates[0]), check_existing=False)
+    image.colorspace_settings.name = 'Non-Color'
     width, height = image.size
     if (width, height) != (2048, 1024):
         raise RuntimeError('Размер карты глубины не совпадает с панорамой')
