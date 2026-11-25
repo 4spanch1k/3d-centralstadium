@@ -8,6 +8,7 @@ import argparse
 import json
 import math
 import struct
+import subprocess
 import sys
 import time
 import zlib
@@ -112,9 +113,11 @@ for node in nodes:
     encoded[valid] = np.rint(distances[valid] * (65534 / 200)).astype(np.uint16)
     depth_path = out / (node['id'] + '-depth.png')
     save_png16(depth_path, encoded)
-    results.append({**node, 'color': color_path.name, 'depth': depth_path.name,
+    webp_path = out / (node['id'] + '-color.webp')
+    subprocess.run(['/opt/homebrew/bin/cwebp', '-quiet', '-q', '82', '-m', '4', str(color_path), '-o', str(webp_path)], check=True)
+    results.append({**node, 'color': webp_path.name, 'depth': depth_path.name,
                     'depthMetresPerUnit': 200 / 65534, 'depthNoHit': 65535,
                     'seconds': round(time.monotonic() - started, 1),
-                    'colorBytes': color_path.stat().st_size, 'depthBytes': depth_path.stat().st_size})
+                    'colorBytes': webp_path.stat().st_size, 'depthBytes': depth_path.stat().st_size})
     print(node['id'], results[-1], flush=True)
 (out / 'test-index.json').write_text(json.dumps(results, ensure_ascii=False, indent=2) + '\n')
