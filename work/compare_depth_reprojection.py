@@ -22,6 +22,7 @@ out = root / 'work/exports/depth-pilot-comparison'
 out.mkdir(parents=True, exist_ok=True)
 parser = argparse.ArgumentParser()
 parser.add_argument('--selftest', action='store_true')
+parser.add_argument('--splat', type=int, choices=(1, 2), default=1)
 args = parser.parse_args(sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else [])
 source = json.loads((source_dir / 'test-index.json').read_text())[0]
 if args.selftest:
@@ -88,12 +89,28 @@ for target in references:
     target_dist = np.sqrt(dx * dx + dy * dy + dz * dz)
     lon = np.arctan2(-dx, -dy)
     lat = np.arcsin(np.clip(dz / np.maximum(target_dist, 1e-6), -1, 1))
-    tx = np.rint((lon / (2 * np.pi) + 0.5) * width - 0.5).astype(np.int32) % width
-    ty = np.rint((0.5 - lat / np.pi) * height - 0.5).astype(np.int32)
-    usable = valid & (ty >= 0) & (ty < height)
-    target_index = (ty[usable] * width + tx[usable]).astype(np.int64)
-    source_index = np.flatnonzero(usable)
-    source_distance = target_dist[usable]
+    x_float = (lon / (2 * np.pi) + 0.5) * width - 0.5
+    y_float = (0.5 - lat / np.pi) * height - 0.5
+    if args.splat == 1:
+        tx = np.rint(x_float).astype(np.int32) % width
+        ty = np.rint(y_float).astype(np.int32)
+        usable = valid & (ty >= 0) & (ty < height)
+        target_index = (ty[usable] * width + tx[usable]).astype(np.int64)
+        source_index = np.flatnonzero(usable)
+    else:
+        x0 = np.floor(x_float).astype(np.int32)
+        y0 = np.floor(y_float).astype(np.int32)
+        targets, sources = [], []
+        for oy in (0, 1):
+            for ox in (0, 1):
+                ty = y0 + oy
+                tx = (x0 + ox) % width
+                usable = valid & (ty >= 0) & (ty < height)
+                targets.append((ty[usable] * width + tx[usable]).astype(np.int64))
+                sources.append(np.flatnonzero(usable))
+        target_index = np.concatenate(targets)
+        source_index = np.concatenate(sources)
+    source_distance = target_dist.ravel()[source_index]
     order = np.lexsort((source_distance, target_index))
     ordered_target = target_index[order]
     first = np.r_[True, ordered_target[1:] != ordered_target[:-1]]
@@ -120,7 +137,7 @@ for target in references:
               'comparedPercent': round(100 * float(comparable.sum()) / max(1, int(foreground.sum())), 2),
               'meanAbsoluteRgb': round(float(difference[comparable].mean()), 3) if comparable.any() else None,
               'psnrDb': round(10 * math.log10(255 * 255 / mse), 2) if mse > 0 else None}
-    save_png(out / (target['id'] + '-reprojected.png'), projected)
+    save_png(out / (target['id'] + f'-reprojected-splat{args.splat}.png'), projected)
     results.append(result)
     print(json.dumps(result, ensure_ascii=False), flush=True)
-(out / ('metrics-selftest.json' if args.selftest else 'metrics.json')).write_text(json.dumps(results, ensure_ascii=False, indent=2) + '\n')
+(out / (f'metrics-selftest-splat{args.splat}.json' if args.selftest else f'metrics-splat{args.splat}.json')).write_text(json.dumps(results, ensure_ascii=False, indent=2) + '\n')
