@@ -24,14 +24,61 @@ try {
   document.querySelector('#error').hidden = false;
   throw error;
 }
-// Телефоны и планшеты: меньше разрешение, без тяжёлых эффектов.
-const lowPower = window.matchMedia('(pointer: coarse)').matches;
-// Режим максимального качества (только ?quality=max, для съёмки и показа на мощном компьютере): родное разрешение экрана,
-// постоянное затенение, мягкие тени, глянцевый пластик. По умолчанию включён плавный режим с адаптивным разрешением.
-const qualityMax = !lowPower && new URLSearchParams(location.search).get('quality') === 'max';
+// Автоподбор качества: короткий замер видеокарты при запуске выбирает один из четырёх уровней (low, mid, high, max);
+// во время работы разрешение дополнительно подстраивается под реальную частоту кадров. Принудительно: ?tier=low|mid|high|max (?quality=max то же, что tier=max).
+// low — слабые телефоны, mid — хорошие телефоны и лёгкие ноутбуки, high — ноутбуки и компьютеры, max — съёмка и показ на мощном компьютере.
+const touchDevice = window.matchMedia('(pointer: coarse)').matches;
+function benchmarkGpu() {
+  // Полноэкранный шейдер на маленькой текстуре: время на видеокарте без привязки к размеру окна.
+  try {
+    const size = 512;
+    const target = new THREE.WebGLRenderTarget(size, size);
+    const benchScene = new THREE.Scene();
+    const benchCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    const material = new THREE.ShaderMaterial({
+      vertexShader: 'void main(){gl_Position=vec4(position.xy,0.,1.);}',
+      fragmentShader: 'precision highp float;void main(){vec2 p=gl_FragCoord.xy/512.;float a=0.;for(int i=0;i<160;i++){a+=sin(p.x*float(i)+a)*cos(p.y*float(i)-a);}gl_FragColor=vec4(vec3(a),1.);}',
+    });
+    benchScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material));
+    const pixel = new Uint8Array(4);
+    renderer.setRenderTarget(target);
+    renderer.render(benchScene, benchCamera);
+    renderer.readRenderTargetPixels(target, 0, 0, 1, 1, pixel);
+    const start = performance.now();
+    for (let i = 0; i < 8; i += 1) renderer.render(benchScene, benchCamera);
+    renderer.readRenderTargetPixels(target, 0, 0, 1, 1, pixel);
+    const ms = (performance.now() - start) / 8;
+    renderer.setRenderTarget(null);
+    target.dispose();
+    material.dispose();
+    return ms;
+  } catch (error) {
+    renderer.setRenderTarget(null);
+    return null;
+  }
+}
+function chooseTier() {
+  const params = new URLSearchParams(location.search);
+  const forced = params.get('tier') || (params.get('quality') === 'max' ? 'max' : '');
+  if (['low', 'mid', 'high', 'max'].includes(forced)) return { tier: forced, ms: null };
+  const ms = benchmarkGpu();
+  let tier;
+  if (ms === null) tier = touchDevice ? 'low' : 'high';
+  else tier = ms < GPU_HIGH_MS ? 'high' : ms < GPU_MID_MS ? 'mid' : 'low';
+  if (touchDevice && tier === 'high') tier = 'mid';   // телефоны не выше mid: нагрев и батарея
+  return { tier, ms };
+}
+const GPU_HIGH_MS = 2.5;
+const GPU_MID_MS = 14;
+const tierInfo = chooseTier();
+const tier = tierInfo.tier;
+window.__tier = tierInfo;
+const lowPower = tier === 'low';
+const midTier = tier === 'mid';
+const qualityMax = tier === 'max';
 // Замер на Mac (Retina): обычный кадр 3–5 мс даже в 2×, а проход затенения GTAO добавляет 8–17 мс (он заново рисует всю сцену ради нормалей),
 // поэтому по умолчанию GTAO выключен, а сэкономленное идёт на чёткость (разрешение до 2×). Затенение даёт запечённая карта.
-let pixelRatio = Math.min(window.devicePixelRatio, lowPower ? 1.25 : 2);
+let pixelRatio = Math.min(window.devicePixelRatio, lowPower ? 1.25 : midTier ? 1.75 : 2);
 renderer.setPixelRatio(pixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -98,7 +145,7 @@ function applySky(texture) {
 }
 new HDRLoader().load(asset('sky.hdr'), (texture) => {
   applySky(texture);
-  if (!lowPower) setTimeout(() => new HDRLoader().load(asset('sky-2k.hdr'), applySky, undefined, () => {}), 3000);
+  if (!lowPower && !midTier) setTimeout(() => new HDRLoader().load(asset('sky-2k.hdr'), applySky, undefined, () => {}), 3000);
 }, undefined, (error) => console.error('Не удалось загрузить небо', error));
 const camera = new THREE.PerspectiveCamera(38, window.innerWidth / window.innerHeight, 0.1, 7500);
 camera.layers.enable(1);
@@ -114,7 +161,7 @@ scene.add(hemisphere);
 const sun = new THREE.DirectionalLight('#fff0d0', 2.6);
 sun.position.set(-85, 140, -70);
 sun.castShadow = true;
-const shadowSize = lowPower ? 2048 : qualityMax ? Math.min(8192, renderer.capabilities.maxTextureSize) : 4096;
+const shadowSize = lowPower ? 2048 : midTier ? 3072 : qualityMax ? Math.min(8192, renderer.capabilities.maxTextureSize) : 4096;
 sun.shadow.mapSize.set(shadowSize, shadowSize);
 sun.shadow.radius = 2.5;
 sun.shadow.camera.left = -135;
@@ -165,7 +212,7 @@ const darkConcrete = new THREE.MeshStandardMaterial({ color: '#bcc2bc', map: con
 // Выцветание и разводы бетона: шум по мировым координатам, без отдельных текстур.
 // Запечённое затенение (Blender Cycles, вид сверху): карта по мировым координатам (x, z). Применяется к бетону, дорожкам, газону и земле.
 // Карта покрывает x in [-112, 112], z in [-96, 96]; на телефонах версия вдвое меньше.
-const aoTexture = textureLoader.load(asset(lowPower ? 'ao-top-2k.webp' : 'ao-top.webp'), undefined, undefined, () => {});
+const aoTexture = textureLoader.load(asset(lowPower || midTier ? 'ao-top-2k.webp' : 'ao-top.webp'), undefined, undefined, () => {});
 aoTexture.colorSpace = THREE.SRGBColorSpace;
 aoTexture.anisotropy = 4;
 // Вечерний свет прожекторов, запечённый в Blender (work/blender/bake_floodlight_topdown.py), на той же области; 0 днём.
@@ -703,8 +750,8 @@ seatHits.visible = false;
 const supportGeometry = new THREE.BoxGeometry(0.09, 0.25, 0.12);
 supportGeometry.translate(0, -0.15, 0.08);
 // Детальные кресла вблизи: отдельные небольшие меши только для нужных мест (сектор или окрестность кресла).
-const detailCapacity = lowPower ? 3200 : qualityMax ? 14000 : 7000;
-const detailRadius = lowPower ? 28 : qualityMax ? 72 : 48;
+const detailCapacity = lowPower ? 3200 : midTier ? 5000 : qualityMax ? 14000 : 7000;
+const detailRadius = lowPower ? 28 : midTier ? 38 : qualityMax ? 72 : 48;
 let detailSeatGeometry = seatGeometry;
 const detailMeshes = {
   yellow: new THREE.InstancedMesh(seatGeometry, yellowSeats, detailCapacity),
@@ -712,7 +759,7 @@ const detailMeshes = {
   green: new THREE.InstancedMesh(seatGeometry, greenSeats, detailCapacity),
 };
 // Три уровня кресла: рядом (до 20 м) подробная модель из stadium-seat.glb, дальше упрощённая (около 200 треугольников), ещё дальше простые кубики.
-const nearDetailRadius = lowPower ? 14 : qualityMax ? 30 : 20;
+const nearDetailRadius = lowPower ? 14 : midTier ? 17 : qualityMax ? 30 : 20;
 const detailMid = {
   yellow: new THREE.InstancedMesh(seatGeometry, yellowSeats, detailCapacity),
   blue: new THREE.InstancedMesh(seatGeometry, blueSeats, detailCapacity),
@@ -1988,7 +2035,7 @@ if (!lowPower && new URLSearchParams(location.search).get('fx') !== '0') {
 
 // Рендер по требованию: пока ничего не меняется, сцена не перерисовывается (экономит батарею и нагрев).
 const maxPixelRatio = pixelRatio;
-const minPixelRatio = lowPower ? 0.85 : qualityMax ? maxPixelRatio : 1.0;
+const minPixelRatio = lowPower ? 0.85 : midTier ? 0.9 : qualityMax ? maxPixelRatio : 1.0;
 let pixelCeiling = maxPixelRatio;
 let lastViewCap = maxPixelRatio;
 let lastActivity = performance.now() + 8000;
@@ -2049,7 +2096,7 @@ renderer.setAnimationLoop(() => {
       fpsShownAt = now;
       const sorted = [...fpsGaps].sort((x, y) => x - y);
       const average = fpsGaps.reduce((sum, value) => sum + value, 0) / fpsGaps.length;
-      fpsPanel.textContent = `${(1000 / average).toFixed(0)} fps · ${average.toFixed(1)} мс · p95 ${sorted[Math.floor(sorted.length * 0.95)].toFixed(1)} мс\nразрешение ${pixelRatio.toFixed(2)}× · ${canvas.width}×${canvas.height}\nвызовов ${renderer.info.render.calls} · треугольников ${(renderer.info.render.triangles / 1e6).toFixed(2)} млн\n${view}/${stage}${eveningMode ? ' · вечер' : ''}${composer ? ' · композитор' : ''}`;
+      fpsPanel.textContent = `${(1000 / average).toFixed(0)} fps · ${average.toFixed(1)} мс · p95 ${sorted[Math.floor(sorted.length * 0.95)].toFixed(1)} мс\nразрешение ${pixelRatio.toFixed(2)}× · ${canvas.width}×${canvas.height}\nвызовов ${renderer.info.render.calls} · треугольников ${(renderer.info.render.triangles / 1e6).toFixed(2)} млн\nуровень ${tier}${tierInfo.ms ? ` (замер ${tierInfo.ms.toFixed(2)} мс)` : ''} · ${view}/${stage}${eveningMode ? ' · вечер' : ''}${composer ? ' · композитор' : ''}`;
       fpsGaps.length = 0;
     }
   }
