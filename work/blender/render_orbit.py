@@ -47,7 +47,7 @@ sun.rotation_euler = (-Vector((-85, 70, 140))).to_track_quat('-Z', 'Y').to_euler
 camera = bpy.data.objects.new('Orbit camera', bpy.data.cameras.new('Orbit camera'))
 scene.collection.objects.link(camera)
 scene.camera = camera
-camera.data.lens = 32 if args.portrait else 36
+camera.data.lens = 45 if args.portrait else 36
 if args.portrait:
     camera.data.sensor_fit = 'HORIZONTAL'
 scene.frame_start = 1
