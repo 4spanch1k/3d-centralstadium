@@ -848,8 +848,23 @@ for (const [stand, sectors] of Object.entries(standSectors)) {
     const rowSectors = stand === 'east' ? (row <= 13 ? sectors.slice(0, 8) : sectors.slice(8))
       : stand === 'west' ? (row <= 15 ? sectors.slice(0, 9) : sectors.slice(9)) : sectors;
     const numbers = new Map();
+    // Проём под здание в верхних рядах западной трибуны должен проходить по границе секторов, а не внутри сектора:
+    // иначе у сектора две отдельные части (камера целилась в пустую середину). Места делятся на две группы по проёму (разрыв по x больше 6 м).
+    let cut = -1;
+    if (stand === 'west') {
+      let widest = 6;
+      for (let k = 1; k < rowSeats.length; k += 1) {
+        const gap = Math.abs(rowSeats[k].position.x - rowSeats[k - 1].position.x);
+        if (gap > widest) { widest = gap; cut = k; }
+      }
+    }
+    const leftSectors = cut > 0 ? Math.max(1, Math.min(rowSectors.length - 1, Math.round(rowSectors.length * cut / rowSeats.length))) : 0;
     rowSeats.forEach((seat, index) => {
-      seat.sector = rowSectors[Math.floor(index * rowSectors.length / rowSeats.length)];
+      seat.sector = cut > 0
+        ? (index < cut
+          ? rowSectors[Math.floor(index * leftSectors / cut)]
+          : rowSectors[leftSectors + Math.floor((index - cut) * (rowSectors.length - leftSectors) / (rowSeats.length - cut))])
+        : rowSectors[Math.floor(index * rowSectors.length / rowSeats.length)];
       if ((stand === 'east' || stand === 'west') && row > 15) seat.row -= 15;
       seat.number = (numbers.get(seat.sector) || 0) + 1;
       numbers.set(seat.sector, seat.number);
