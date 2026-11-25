@@ -41,7 +41,12 @@
       "RGB": "experimental AO; color encoding not verified",
       "A": "valid sample"
     },
-    "decode": "Not validated. Do not connect; replacement linear bake in progress."
+    "decode": "Legacy PNG encoding not validated. New linearFiles are experimental; do not connect without checking renderer color handling and integration.",
+    "linearFiles": [
+      "seat-cycles-ao-linear.png",
+      "concrete-cycles-ao-linear.png"
+    ],
+    "linearNote": "Cycles AO baked to Non-Color image; raw values, experimental and not visually validated."
   },
   "files": {
     "seat-day.png": {
@@ -59,6 +64,14 @@
     "concrete-cycles-ao.png": {
       "bytes": 1443,
       "sha256": "3d94e55f02818d06951550e809513d968b3760cfc419176f7bff841a305f09e9"
+    },
+    "seat-cycles-ao-linear.png": {
+      "bytes": 1440,
+      "sha256": "82968aa93e2f41ab0806d0d6ea1950e4bedc93bf881bd035a49b9665cc8cf98b"
+    },
+    "concrete-cycles-ao-linear.png": {
+      "bytes": 1910,
+      "sha256": "969539f979702b0ed7768ae196f14f7b1b977a579b1048aa931efa3f732f5f1d"
     }
   }
 }
