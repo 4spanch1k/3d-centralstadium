@@ -794,6 +794,9 @@ const standSectors = {
 for (const [stand, sectors] of Object.entries(standSectors)) {
   for (let row = 1; row <= rows; row += 1) {
     const rowSeats = seats.filter((seat) => seat.stand === stand && seat.row === row);
+    // Обход ряда начинается внутри восточной трибуны, поэтому её места в списке идут не подряд (середина, потом левый край);
+    // без сортировки один сектор забирал места с двух концов трибуны. Порядок мест по x (слева направо) делает сектора цельными.
+    if (stand === 'east') rowSeats.sort((a, b) => a.position.x - b.position.x);
     const rowSectors = stand === 'east' ? (row <= 13 ? sectors.slice(0, 8) : sectors.slice(8))
       : stand === 'west' ? (row <= 15 ? sectors.slice(0, 9) : sectors.slice(9)) : sectors;
     const numbers = new Map();
@@ -1915,7 +1918,7 @@ if (!initialHash && !matchMedia('(prefers-reduced-motion: reduce)').matches && !
 // Затенение в контактах (ambient occlusion): тёмные стыки между рядами, креслами и ступенями.
 // Включается только на десктопе; ?fx=0 в адресе отключает эффект.
 if (location.search.includes('debug')) {
-  window.__debug = { renderer, scene, camera, getComposer: () => composer, getAoCamera: () => aoCamera };
+  window.__debug = { renderer, scene, camera, seats, getComposer: () => composer, getAoCamera: () => aoCamera };
   // Экспорт сцены в GLB для рендера панорам в Blender (работает только с dev-сервером).
   // Список мест (трибуна, сектор, ряд, номер, положение камеры) для планирования сетки панорам.
   window.__debug.exportSeats = async () => {
