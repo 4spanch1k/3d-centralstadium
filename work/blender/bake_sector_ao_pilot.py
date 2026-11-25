@@ -42,6 +42,7 @@ world.use_nodes = True
 world.node_tree.nodes['Background'].inputs['Color'].default_value = (1, 1, 1, 1)
 scene.world = world
 image = bpy.data.images.new('AO seat pilot', width=800, height=34, alpha=True)
+image.colorspace_settings.name = 'Non-Color'
 image.generated_color = (0, 0, 0, 0)
 material = bpy.data.materials.new('AO bake target')
 material.use_nodes = True
@@ -76,7 +77,7 @@ scene.render.bake.margin = 0
 scene.render.bake.use_clear = True
 started = time.monotonic()
 bpy.ops.object.bake(type='AO')
-image.filepath_raw = str(out / f'{args.surface}-{args.stand}-{args.sector}-cycles-ao.png')
+image.filepath_raw = str(out / f'{args.surface}-{args.stand}-{args.sector}-cycles-ao-linear.png')
 image.file_format = 'PNG'
 image.save()
 print(f'Cycles AO: {len(seats)} probes, {args.samples} samples, {time.monotonic() - started:.1f}s, {image.filepath_raw}', flush=True)

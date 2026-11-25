@@ -38,10 +38,10 @@
       "concrete-cycles-ao.png"
     ],
     "channels": {
-      "RGB": "AO saved as sRGB",
+      "RGB": "experimental AO; color encoding not verified",
       "A": "valid sample"
     },
-    "decode": "decode sRGB exactly once before multiplication; validate against shader color management"
+    "decode": "Not validated. Do not connect; replacement linear bake in progress."
   },
   "files": {
     "seat-day.png": {
