@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "status": "experimental-do-not-enable",
+  "coverage": "one sample; remaining 23 nodes are local-only",
+  "plannedNodes": 24,
+  "imageSize": [
+    2048,
+    1024
+  ],
+  "projection": "equirectangular 360x180",
+  "coordinates": "Three.js, y is eye height",
+  "cameraCenterDirection": [
+    0,
+    0,
+    1
+  ],
+  "cameraUp": [
+    0,
+    1,
+    0
+  ],
+  "yawConvention": "atan2(-z,-x), measured from -X toward -Z",
+  "depth": {
+    "format": "PNG16 grayscale",
+    "metresPerUnit": 0.0030518509475997192,
+    "noHit": 65535,
+    "maximumMetres": 200
+  },
+  "nodes": [
+    {
+      "id": "west-9-0-0",
+      "stand": "west",
+      "sector": 9,
+      "row": 2,
+      "number": 3,
+      "position": [
+        -60.93,
+        2.09,
+        -58.04
+      ],
+      "yaw": 0.7611111015790737,
+      "seats": 16,
+      "maxOffset": 2.147,
+      "color": "west-9-0-0-color.webp",
+      "depth": "west-9-0-0-depth.png",
+      "depthMetresPerUnit": 0.0030518509475997192,
+      "depthNoHit": 65535,
+      "seconds": 18.9,
+      "colorBytes": 134148,
+      "depthBytes": 714068
+    }
+  ]
+}
