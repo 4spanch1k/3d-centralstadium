@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "fps": 24,
+  "durationSeconds": 6,
+  "dimensions": {
+    "desktop": [
+      1920,
+      1080
+    ],
+    "phone": [
+      1080,
+      1920
+    ]
+  },
+  "files": {
+    "stadium-orbit-desktop.mp4": {
+      "bytes": 5541546,
+      "sha256": "fe846eb4e6a06c28146cd00712996e228fc0c4c754ce468112cb4ff65dc9666f"
+    },
+    "stadium-orbit-desktop.webm": {
+      "bytes": 4457018,
+      "sha256": "e45fe01da4d58319fb66ec65da3d79fe4345a7d592a1fece1f3cde71ea84e779"
+    },
+    "stadium-orbit-phone.mp4": {
+      "bytes": 2682415,
+      "sha256": "1a2686feac2d7dd37eec4d3faa76c3769eab231d5a124e42d69c63da02ea4c90"
+    },
+    "stadium-orbit-phone.webm": {
+      "bytes": 2165575,
+      "sha256": "d3be9166e8ac015da3fce791e91fd1adbe0f603eb1d6e71089ddd23e853e02f3"
+    },
+    "intro-desktop.jpg": {
+      "bytes": 136617,
+      "sha256": "4168b64d87ed2f99ea6d68df01407fd9bad92a07a12356710227cf1a6aa7f4a7"
+    },
+    "intro-phone.jpg": {
+      "bytes": 116595,
+      "sha256": "9f9e648e8e4a3c49dbfb3b3b95e0677e6e8924143ff4e19a25b71385167ff605"
+    }
+  }
+}
