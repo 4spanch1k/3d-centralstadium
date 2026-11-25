@@ -1994,6 +1994,8 @@ if (location.search.includes('debug')) {
       scene.add(exportLegs);
       scene.traverse((object) => {
         if (object.isMesh && (object === sectorHits || object === seatHits)) { hidden.push([object, object.visible]); object.visible = false; }
+        // Прозрачные плоскости с текстурой (пятна потёртости газона, мягкая тень у основания, сетки, номера рядов) в Blender импортируются непрозрачными и дают чёрные пятна.
+        else if (object.isMesh && object.visible && !Array.isArray(object.material) && object.material?.transparent && object.material?.map) { hidden.push([object, object.visible]); object.visible = false; }
       });
       const result = await new GLTFExporter().parseAsync(scene, { binary: true, onlyVisible: true, maxTextureSize: 1024 });
       const response = await fetch(`/__save?name=${name}`, { method: 'POST', body: result });
