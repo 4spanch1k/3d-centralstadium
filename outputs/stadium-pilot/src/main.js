@@ -2014,7 +2014,8 @@ if (!initialHash && !matchMedia('(prefers-reduced-motion: reduce)').matches && !
   const size = lowPower || window.innerWidth <= 700 ? 'phone' : 'desktop';
   introVideo.poster = asset(`intro-${size}.jpg`);
   const format = introVideo.canPlayType('video/webm; codecs="vp9"') ? 'webm' : 'mp4';
-  introVideo.src = asset(`stadium-orbit-${size}.${format}`);
+  // ?v=2: сбрасывает кэш браузера, где мог остаться старый ролик с чёрными пятнами на поле.
+  introVideo.src = `${asset(`stadium-orbit-${size}.${format}`)}?v=2`;
   introVideo.play().then(() => {
     if (showIntro) introVideo.classList.add('visible');
     else introVideo.pause();
