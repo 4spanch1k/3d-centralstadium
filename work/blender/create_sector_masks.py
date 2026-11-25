@@ -48,6 +48,46 @@ def save_png(path, ids):
         return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data) & 0xffffffff)
     path.write_bytes(b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(data, 9)) + chunk(b'IEND', b''))
 
+def trace_polygons(mask):
+    """Контуры маски по границам пикселей, включая отдельные внутренние контуры."""
+    padded = np.pad(mask, 1)
+    edges = defaultdict(list)
+    def add(y, x, dx, dy):
+        edges[(x, y)].append((x + dx, y + dy))
+    for y, x in zip(*np.nonzero(mask & ~padded[:-2, 1:-1])):
+        add(int(y), int(x), 1, 0)
+    for y, x in zip(*np.nonzero(mask & ~padded[1:-1, 2:])):
+        add(int(y), int(x) + 1, 0, 1)
+    for y, x in zip(*np.nonzero(mask & ~padded[2:, 1:-1])):
+        add(int(y) + 1, int(x) + 1, -1, 0)
+    for y, x in zip(*np.nonzero(mask & ~padded[1:-1, :-2])):
+        add(int(y) + 1, int(x), 0, -1)
+    directions = {(1, 0): 0, (0, 1): 1, (-1, 0): 2, (0, -1): 3}
+    polygons = []
+    while edges:
+        start = next(iter(edges))
+        current = start
+        previous = None
+        polygon = []
+        while True:
+            options = edges[current]
+            if previous is None or len(options) == 1:
+                chosen = options.pop()
+            else:
+                incoming = directions[(current[0] - previous[0], current[1] - previous[1])]
+                preference = {1: 0, 0: 1, 3: 2, 2: 3}
+                chosen = min(options, key=lambda point: preference[(directions[(point[0] - current[0], point[1] - current[1])] - incoming) % 4])
+                options.remove(chosen)
+            if not options:
+                del edges[current]
+            if previous is None or (current[0] - previous[0], current[1] - previous[1]) != (chosen[0] - current[0], chosen[1] - current[1]):
+                polygon.append(list(current))
+            previous, current = current, chosen
+            if current == start:
+                break
+        polygons.append(polygon)
+    return polygons
+
 for name, width, height, z, fov, radius in [('desktop', 2560, 1440, 375, 38, 16), ('phone', 1170, 1700, 380, 54, 13)]:
     scene.render.resolution_x, scene.render.resolution_y = width, height
     scene.render.resolution_percentage = 100
@@ -103,6 +143,7 @@ for name, width, height, z, fov, radius in [('desktop', 2560, 1440, 375, 38, 16)
         sector[name] = {
             'center': [round(float(xs.mean()), 2), round(float(ys.mean()), 2)],
             'bounds': [int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1],
+            'polygons': trace_polygons(ids == number),
         }
     if mismatches:
         raise ValueError(f'{name}: {mismatches} мест не совпали с маской')
@@ -115,4 +156,4 @@ for name, width, height, z, fov, radius in [('desktop', 2560, 1440, 375, 38, 16)
     'boundsFormat': '[left, top, right, bottom), pixels from top left',
     'sizes': {'desktop': [2560, 1440], 'phone': [1170, 1700]},
     'sectors': [sectors[number] for number in sorted(sectors)],
-}, ensure_ascii=False, indent=2) + '\n')
+}, ensure_ascii=False, separators=(',', ':')) + '\n')
