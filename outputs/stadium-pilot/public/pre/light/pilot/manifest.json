@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "status": "experimental-do-not-enable",
+  "dimensions": [
+    800,
+    34
+  ],
+  "index": "x=pathIndex, y=rowIndex from top",
+  "coverage": [
+    {
+      "stand": "west",
+      "sector": 9,
+      "seats": 360
+    },
+    {
+      "stand": "east",
+      "sector": 46,
+      "seats": 456
+    }
+  ],
+  "missing": "alpha=0; use neutral multiplier 1",
+  "rayMaps": {
+    "files": [
+      "seat-day.png",
+      "concrete-day.png"
+    ],
+    "channels": {
+      "R": "direct visibility 0..1",
+      "G": "sky visibility 0..1",
+      "B": "local openness 0..1",
+      "A": "valid sample"
+    },
+    "colorSpace": "raw linear data"
+  },
+  "cyclesAO": {
+    "files": [
+      "seat-cycles-ao.png",
+      "concrete-cycles-ao.png"
+    ],
+    "channels": {
+      "RGB": "AO saved as sRGB",
+      "A": "valid sample"
+    },
+    "decode": "decode sRGB exactly once before multiplication; validate against shader color management"
+  },
+  "files": {
+    "seat-day.png": {
+      "bytes": 697,
+      "sha256": "04bb6a5de708da685a860e7503beedd6a589dd8d2bb85168408e2c65c5f54f8f"
+    },
+    "concrete-day.png": {
+      "bytes": 983,
+      "sha256": "cc4d2b8e5e7ace1af0a26797c6274cabe3033bf3e30033366ac40343d099175d"
+    },
+    "seat-cycles-ao.png": {
+      "bytes": 1126,
+      "sha256": "452b059dfbf122c26570d4d3a6272016a61a99fe7f0ac425678c762080c9042f"
+    },
+    "concrete-cycles-ao.png": {
+      "bytes": 1443,
+      "sha256": "3d94e55f02818d06951550e809513d968b3760cfc419176f7bff841a305f09e9"
+    }
+  }
+}

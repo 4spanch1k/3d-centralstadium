@@ -1,28 +1,35 @@
-"""Пробное запекание Cycles AO на плоскостях кресел сектора 9.
+"""Пробное запекание Cycles AO для кресел или бетона выбранного сектора.
 
-Запуск: caffeinate -i nice -n 10 Blender -b -P work/blender/bake_sector_ao_pilot.py
-Результат 800×34 в work/exports/seat-light-pilot/, в отдельном PNG маска A
-существующих проб. Это только проверка стоимости и качества одной поверхности;
+Запуск: caffeinate -i nice -n 10 Blender -b -P work/blender/bake_sector_ao_pilot.py -- --stand west --sector 9 --surface seat
+Результат 800×34 в work/exports/seat-light-pilot/, A отмечает существующие пробы. Это только проверка стоимости и качества одной поверхности;
 полноценное освещение и бетон требуют отдельной проверки.
 """
+import argparse
 import json
 import math
 import time
+import sys
 from pathlib import Path
 
 import bpy
 
 root = Path(__file__).resolve().parents[2]
+parser = argparse.ArgumentParser()
+parser.add_argument('--surface', choices=('seat', 'concrete'), default='seat')
+parser.add_argument('--stand', choices=('west', 'east'), default='west')
+parser.add_argument('--sector', type=int, default=9)
+parser.add_argument('--samples', type=int, default=64)
+args = parser.parse_args(sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else [])
 out = root / 'work/exports/seat-light-pilot'
 out.mkdir(parents=True, exist_ok=True)
-seats = [s for s in json.loads((root / 'work/exports/seats-full.json').read_text()) if s['stand'] == 'west' and s['sector'] == 9]
+seats = [s for s in json.loads((root / 'work/exports/seats-full.json').read_text()) if s['stand'] == args.stand and s['sector'] == args.sector]
 if not seats:
-    raise ValueError('В секторе 9 нет мест')
+    raise ValueError('В указанном секторе нет мест')
 bpy.ops.wm.read_factory_settings(use_empty=True)
 bpy.ops.import_scene.gltf(filepath=str(root / 'work/exports/stadium-scene.glb'))
 scene = bpy.context.scene
 scene.render.engine = 'CYCLES'
-scene.cycles.samples = 64
+scene.cycles.samples = args.samples
 scene.cycles.use_denoising = False
 preferences = bpy.context.preferences.addons['cycles'].preferences
 preferences.compute_device_type = 'METAL'
@@ -44,6 +51,9 @@ material.node_tree.nodes.active = texture
 vertices, faces, coordinates = [], [], []
 for seat in seats:
     x, y, z = seat['x'], -seat['z'], seat['y'] - 1 + 0.2
+    if args.surface == 'concrete':
+        length = math.hypot(x, y)
+        x, y, z = x - 0.36 * y / length, y + 0.36 * x / length, z - 0.44
     first = len(vertices)
     vertices.extend([(x - 0.12, y - 0.12, z), (x + 0.12, y - 0.12, z),
                      (x + 0.12, y + 0.12, z), (x - 0.12, y + 0.12, z)])
@@ -66,7 +76,7 @@ scene.render.bake.margin = 0
 scene.render.bake.use_clear = True
 started = time.monotonic()
 bpy.ops.object.bake(type='AO')
-image.filepath_raw = str(out / 'seat-sector9-cycles-ao.png')
+image.filepath_raw = str(out / f'{args.surface}-{args.stand}-{args.sector}-cycles-ao.png')
 image.file_format = 'PNG'
 image.save()
-print(f'Cycles AO: {len(seats)} probes, 64 samples, {time.monotonic() - started:.1f}s, {image.filepath_raw}', flush=True)
+print(f'Cycles AO: {len(seats)} probes, {args.samples} samples, {time.monotonic() - started:.1f}s, {image.filepath_raw}', flush=True)
