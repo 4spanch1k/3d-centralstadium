@@ -35,7 +35,7 @@ depsgraph = bpy.context.evaluated_depsgraph_get()
 x, y, z = node['position']
 origin = Vector((x, -z, y))
 rotation = Euler((math.pi / 2, 0, math.pi)).to_matrix()
-for px, py in [(1024, 512), (1024, 740), (768, 660), (1280, 660), (1024, 220), (1536, 512)]:
+for px, py in [(1024, 512), (1024, 740), (768, 660), (1280, 660), (1024, 220), (1536, 512), (1260, 460)]:
     row = py * (1 + width * 2)
     if raw[row] != 0:
         raise ValueError('Ожидался PNG без фильтра строк')
@@ -48,4 +48,4 @@ for px, py in [(1024, 512), (1024, 740), (768, 660), (1280, 660), (1024, 220), (
     measured = (point - origin).length if hit else None
     depth = code * node['depthMetresPerUnit'] if code != 65535 else None
     error = abs(depth - measured) if depth is not None and measured is not None else None
-    print(f'pixel=({px},{py}) Z={depth} ray={measured} error={error} object={obj.name if obj else None}', flush=True)
+    print(f'pixel=({px},{py}) Z={depth} ray={measured} error={error} object={obj.name if obj else None} point={tuple(round(v, 3) for v in point) if hit else None} material={obj.data.materials[0].name if obj and obj.type == 'MESH' and obj.data.materials else None}', flush=True)
