@@ -1965,7 +1965,7 @@ if (!initialHash && !matchMedia('(prefers-reduced-motion: reduce)').matches && !
 // Затенение в контактах (ambient occlusion): тёмные стыки между рядами, креслами и ступенями.
 // Включается только на десктопе; ?fx=0 в адресе отключает эффект.
 if (location.search.includes('debug')) {
-  window.__debug = { renderer, scene, camera, seats, getComposer: () => composer, getAoCamera: () => aoCamera };
+  window.__debug = { getRefine: () => refine, renderer, scene, camera, seats, getComposer: () => composer, getAoCamera: () => aoCamera };
   // Экспорт сцены в GLB для рендера панорам в Blender (работает только с dev-сервером).
   // Список мест (трибуна, сектор, ряд, номер, положение камеры) для планирования сетки панорам.
   window.__debug.exportSeats = async () => {
@@ -2082,6 +2082,93 @@ const fpsPanel = new URLSearchParams(location.search).get('fps') === '1' ? (() =
 })() : null;
 const fpsGaps = [];
 let fpsShownAt = 0;
+// Чёткий кадр в покое (по мотивам приёма «качество, когда ничего не движется»): когда камера замерла на 0,2 с, сцена несколько раз
+// дорисовывается с микросдвигом (субпиксельный джиттер Холтона) и кадры усредняются в линейном HDR; затем тонмаппинг. Края и мелкие детали
+// становятся чище и резче без новых файлов; при движении возвращается обычный быстрый кадр. Число проходов зависит от уровня, ?refine=0 выключает.
+const refineParam = new URLSearchParams(location.search).get('refine');
+const refine = {
+  n: refineParam !== null ? Math.max(0, Number(refineParam) || 0) : (lowPower ? 4 : midTier ? 8 : qualityMax ? 24 : 12),
+  index: 0, done: false, cur: null, acc: null, width: 0, height: 0,
+  quadScene: new THREE.Scene(), quadCamera: new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1),
+};
+const refineSize = new THREE.Vector2();
+const refineClear = new THREE.Color();
+const refineVertex = 'varying vec2 v;void main(){v=uv;gl_Position=vec4(position.xy,0.,1.);}';
+refine.add = new THREE.ShaderMaterial({
+  uniforms: { tCur: { value: null }, weight: { value: 1 } },
+  vertexShader: refineVertex,
+  fragmentShader: 'uniform sampler2D tCur;uniform float weight;varying vec2 v;void main(){gl_FragColor=vec4(texture2D(tCur,v).rgb*weight,1.);}',
+  blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor,
+  blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneFactor, depthTest: false, depthWrite: false, toneMapped: false,
+});
+refine.show = new THREE.ShaderMaterial({
+  uniforms: { tAcc: { value: null }, scale: { value: 1 } },
+  vertexShader: refineVertex,
+  fragmentShader: 'uniform sampler2D tAcc;uniform float scale;varying vec2 v;void main(){gl_FragColor=vec4(texture2D(tAcc,v).rgb*scale,1.);\n#include <tonemapping_fragment>\n#include <colorspace_fragment>\n}',
+  depthTest: false, depthWrite: false,
+});
+refine.quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), refine.add);
+refine.quad.frustumCulled = false;
+refine.quadScene.add(refine.quad);
+const refineProjection = new THREE.Matrix4();
+function halton(index, base) {
+  let fraction = 1;
+  let result = 0;
+  for (let i = index; i > 0; i = Math.floor(i / base)) {
+    fraction /= base;
+    result += fraction * (i % base);
+  }
+  return result;
+}
+function refineReset() {
+  refine.index = 0;
+  refine.done = false;
+}
+function refineStep() {
+  renderer.getDrawingBufferSize(refineSize);
+  if (!refine.cur || refine.width !== refineSize.x || refine.height !== refineSize.y) {
+    refine.cur?.dispose();
+    refine.acc?.dispose();
+    refine.width = refineSize.x;
+    refine.height = refineSize.y;
+    const options = { type: THREE.HalfFloatType, magFilter: THREE.LinearFilter, minFilter: THREE.LinearFilter, generateMipmaps: false };
+    refine.cur = new THREE.WebGLRenderTarget(refine.width, refine.height, { ...options, depthBuffer: true });
+    refine.acc = new THREE.WebGLRenderTarget(refine.width, refine.height, { ...options, depthBuffer: false });
+    refine.index = 0;
+  }
+  const k = refine.index;
+  if (k === 0) {
+    // Чистим накопитель в чёрный: цвет очистки рендерера после отрисовки сцены с фоном-цветом уже не чёрный.
+    renderer.setRenderTarget(refine.acc);
+    renderer.getClearColor(refineClear);
+    const clearAlpha = renderer.getClearAlpha();
+    renderer.setClearColor(0x000000, 0);
+    renderer.clear();
+    renderer.setClearColor(refineClear, clearAlpha);
+  }
+  // Сдвиг изображения на долю пикселя: правка проекции камеры (кадровое смещение для панели выбора места сохраняется).
+  refineProjection.copy(camera.projectionMatrix);
+  camera.projectionMatrix.elements[8] -= (halton(k + 1, 2) - 0.5) * 2 / refine.width;
+  camera.projectionMatrix.elements[9] -= (halton(k + 1, 3) - 0.5) * 2 / refine.height;
+  renderer.setRenderTarget(refine.cur);
+  renderer.render(scene, camera);
+  camera.projectionMatrix.copy(refineProjection);
+  refine.quad.material = refine.add;
+  refine.add.uniforms.tCur.value = refine.cur.texture;
+  refine.add.uniforms.weight.value = 1 / refine.n;
+  renderer.setRenderTarget(refine.acc);
+  renderer.autoClear = false;
+  renderer.render(refine.quadScene, refine.quadCamera);
+  renderer.autoClear = true;
+  refine.quad.material = refine.show;
+  refine.show.uniforms.tAcc.value = refine.acc.texture;
+  refine.show.uniforms.scale.value = refine.n / (k + 1);
+  renderer.setRenderTarget(null);
+  renderer.render(refine.quadScene, refine.quadCamera);
+  refine.index += 1;
+  if (refine.index >= refine.n) refine.done = true;
+}
+refine.step = refineStep;
 renderer.setAnimationLoop(() => {
   const now = performance.now();
   const active = Boolean(cameraTransition) || now - lastActivity < 1800;
@@ -2089,6 +2176,9 @@ renderer.setAnimationLoop(() => {
   if (!active && !flagsLive) return;
   const gap = now - lastRender;
   if (gap < (active ? 15 : 50)) return;
+  // Кадр уже уточнён и ничего не менялось: больше не рисуем (экономит батарею).
+  const idleLong = refine.n > 0 && now - lastActivity > 200 && !cameraTransition;
+  if (idleLong && refine.done) return;
   lastRender = now;
   if (fpsPanel && gap < 500) {
     fpsGaps.push(gap);
@@ -2140,13 +2230,18 @@ renderer.setAnimationLoop(() => {
   const showingPano = panoMode && view === 'seat';
   // Композитор нужен для GTAO (только ?quality=max) и для свечения вечером; днём кадр рисуется напрямую.
   const aoActive = composer && !showingPano && now >= aoPausedUntil && (qualityMax || eveningMode);
+  if (showingPano || aoActive) refineReset();
   if (showingPano) renderer.render(panoScene, camera);
   else if (aoActive) {
     aoCamera.copy(camera, false);
     aoCamera.layers.set(0);
     composer.render();
   }
-  else renderer.render(scene, camera);
+  else if (idleLong && !showingPano) refineStep();
+  else {
+    if (refine.index) refineReset();
+    renderer.render(scene, camera);
+  }
 
   // Адаптивное разрешение: держим около 60 кадров/с. Если не тянет, разрешение снижается; затенение при <22 кадров/с отключается.
   if (active && gap < 120) {
