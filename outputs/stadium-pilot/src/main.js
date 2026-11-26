@@ -1,5 +1,5 @@
 import { createPlanLayer } from './planLayer.js';
-import { createSeatLight } from './seatLight.js';
+import { createConcreteContact, createSeatLight } from './seatLight.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -307,7 +307,7 @@ const blueSeats = seatMaterial('#1f5fa8');
 const greenSeats = seatMaterial('#2f8f6a');
 // Кресла тоже получают запечённое затенение по месту установки (слабее, чтобы не считать тень кресла дважды).
 for (const seatMaterial of [yellowSeats, blueSeats, greenSeats]) weather(seatMaterial, { stains: false, ao: 0.35 });
-// Эксперимент: запечённое затенение кресел из Blender, только по ?light=1 (сила: &lightStrength=0..1).
+// Эксперимент: запечённое затенение кресел и ступеней из Blender, только по ?light=1 (сила: &lightStrength=0..1).
 const lightParams = new URLSearchParams(location.search);
 const seatLight = lightParams.get('light') === '1' ? createSeatLight({
   url: asset('pre/light/day/seat-ao.png'),
@@ -906,6 +906,15 @@ if (seatLight) {
   for (const mesh of [yellow, blue, green, ...Object.values(detailMeshes), ...Object.values(detailMid)]) seatLight.attach(mesh);
   for (const [mesh, data] of [[yellow, yellowData], [blue, blueData], [green, greenData]]) data.forEach((seat, index) => seatLight.set(mesh, index, seat));
 }
+const concreteContact = seatLight ? createConcreteContact({
+  url: asset('pre/light/day/concrete-ao.png'),
+  seats,
+  rect: aoUniforms.uAoRect.value.toArray(),
+  size: lowPower || midTier ? 1024 : 2048,
+  strength: seatLight.uniform.value,
+  onReady: () => markDirty(),
+}) : null;
+if (concreteContact) for (const surface of [concrete, darkConcrete]) concreteContact.patch(surface);
 // Цветной план секторов для общего вида: плоские плитки над местами (одна на кресло), цвет по номеру сектора.
 // Видна только на первом шаге выбора; номер и трибуна показываются при наведении, в списке секторов и на табличках.
 const sectorColors = ['#e8553d', '#f0a81c', '#47b05e', '#2f8fe0', '#9b59b6', '#17a8a1', '#e86a9f', '#8a9a2b'];
@@ -2044,7 +2053,7 @@ if (!initialHash && !matchMedia('(prefers-reduced-motion: reduce)').matches && !
 // Затенение в контактах (ambient occlusion): тёмные стыки между рядами, креслами и ступенями.
 // Включается только на десктопе; ?fx=0 в адресе отключает эффект.
 if (location.search.includes('debug')) {
-  window.__debug = { seatLight, getRefine: () => refine, renderer, scene, camera, seats, getComposer: () => composer, getAoCamera: () => aoCamera };
+  window.__debug = { seatLight, concreteContact, getRefine: () => refine, renderer, scene, camera, seats, getComposer: () => composer, getAoCamera: () => aoCamera };
   // Экспорт сцены в GLB для рендера панорам в Blender (работает только с dev-сервером).
   // Список мест (трибуна, сектор, ряд, номер, положение камеры) для планирования сетки панорам.
   window.__debug.exportSeats = async () => {
