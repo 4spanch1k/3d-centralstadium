@@ -2157,7 +2157,8 @@ if (!lowPower && new URLSearchParams(location.search).get('fx') !== '0') {
 
 // Рендер по требованию: пока ничего не меняется, сцена не перерисовывается (экономит батарею и нагрев).
 const maxPixelRatio = pixelRatio;
-const minPixelRatio = lowPower ? 0.85 : midTier ? 0.9 : qualityMax ? maxPixelRatio : 1.0;
+// Нижняя граница чёткости: на экранах телефонов (2–3 точки на пиксель) ниже неё картинка превращается в «мыло».
+const minPixelRatio = qualityMax ? maxPixelRatio : Math.min(maxPixelRatio, lowPower ? 1 : midTier ? 1.35 : 1.0);
 let pixelCeiling = maxPixelRatio;
 let lastViewCap = maxPixelRatio;
 let lastActivity = performance.now() + 8000;
@@ -2171,6 +2172,8 @@ let aoPausedUntil = 0;
 let aoPauses = 0;
 let lastRaise = 0;
 let noRaiseUntil = 0;
+let resolutionProbe = null; // что было до последнего снижения разрешения
+let noLowerUntil = 0;
 const markDirty = () => { lastActivity = performance.now(); };
 for (const name of ['pointerdown', 'pointermove', 'pointerup', 'wheel', 'keydown', 'click', 'touchstart', 'touchmove', 'change', 'resize']) {
   window.addEventListener(name, markDirty, { passive: true, capture: true });
@@ -2388,6 +2391,7 @@ renderer.setAnimationLoop(() => {
       const average = frameTotal / frameCount;
       frameTotal = 0;
       frameCount = 0;
+      if (resolutionProbe && average <= resolutionProbe.average * 0.92) resolutionProbe = null;
       if (aoActive && average > 21 && !qualityMax) {
         // Сначала жертвуем затенением, а не чёткостью: картинка остаётся резкой.
         aoStrikes += 1;
@@ -2398,8 +2402,19 @@ renderer.setAnimationLoop(() => {
           aoPausedUntil = now + 90000;
           if (aoPauses >= 3) composer = null;
         }
-      } else if (average > 19 && pixelRatio > minPixelRatio && now - lastResolutionChange > 1200) {
+      } else if (resolutionProbe && average > resolutionProbe.average * 0.92) {
+        // Снижение не дало прироста: кадры тормозит не заполнение пикселей (процессор, геометрия или ограничение
+        // частоты в режиме энергосбережения). Возвращаем чёткость и минуту больше не жертвуем ею.
+        pendingPixelRatio = resolutionProbe.ratio;
+        pixelRatio = pendingPixelRatio;
+        pixelCeiling = pendingPixelRatio;
+        resolutionProbe = null;
+        noLowerUntil = now + 60000;
+        lastResolutionChange = now;
+        markDirty();
+      } else if (average > 19 && pixelRatio > minPixelRatio && now >= noLowerUntil && now - lastResolutionChange > 1200) {
         const justRaised = now - lastRaise < 4000;
+        resolutionProbe = { ratio: pixelRatio, average };
         pixelCeiling = Math.max(minPixelRatio, pixelRatio * 0.9);
         pendingPixelRatio = pixelCeiling;
         pixelRatio = pixelCeiling;
@@ -2407,6 +2422,7 @@ renderer.setAnimationLoop(() => {
         markDirty();
         if (justRaised) noRaiseUntil = now + 30000;
       } else if (average < 17.6 && pixelRatio < viewCap && now > noRaiseUntil && now - lastRaise > 8000) {
+        resolutionProbe = null;
         pendingPixelRatio = Math.min(viewCap, pixelRatio + 0.1);
         pixelRatio = pendingPixelRatio;
         lastRaise = now;

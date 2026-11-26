@@ -85,6 +85,7 @@ button { cursor: pointer; }
 
 .panel-copy { margin: 0 0 12px; font-size: 14px; line-height: 1.5; color: var(--muted); }
 .panel-note { margin: 14px 0 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
+@media (pointer: coarse) { .keys-note { display: none; } }
 
 .chips { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
 .chip { height: 46px; border: 1px solid var(--line); border-radius: 14px; background: #fff; font-size: 14px; font-weight: 500; transition: border-color .15s, background .15s; }
@@ -130,8 +131,8 @@ button { cursor: pointer; }
   .open-booking { height: 44px; padding: 0 14px; white-space: nowrap; font-size: 13px; }
   .buttons { border-radius: 22px; }
   .interface { padding: 70px 10px 10px; }
-  .intro { padding: 12px 14px; }
-  .intro h1 { font-size: 17px; }
+  .intro { width: 100%; padding: 12px 14px; }
+  .intro h1 { font-size: 17px; padding-right: 84px; } /* место для переключателя времени суток */
   .description { font-size: 13px; }
   .controls { padding: 8px 8px 6px; }
   .buttons { grid-template-columns: repeat(3, 1fr); }
@@ -140,8 +141,8 @@ button { cursor: pointer; }
   .steps { margin: 10px 0 12px; }
   .chips { grid-template-columns: repeat(6, 1fr); }
   .chip { height: 42px; }
-  .time-toggle, .booking-open .time-toggle { top: 70px; bottom: auto; right: 10px; height: 34px; }
-  .booking-open .time-toggle { top: 64px; }
+  .time-toggle { top: 75px; bottom: auto; right: 18px; height: 32px; }
+  .booking-open .time-toggle { top: 64px; right: 10px; }
   .hint { bottom: calc(46svh + 10px); }
 }
 
