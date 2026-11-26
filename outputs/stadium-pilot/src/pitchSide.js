@@ -281,7 +281,7 @@ export function createApronDetails({ scene, farZ, anisotropy }) {
   const grate = grateTexture(anisotropy);
   grate.repeat.set(78 / 0.24, 1);
   const grateMaterial = new THREE.MeshStandardMaterial({ map: grate, roughness: 0.55, metalness: 0.45 });
-  const drain = new THREE.Mesh(mergeGeometries([-1, 1].map((side) => new THREE.PlaneGeometry(78, 0.34).rotateX(-Math.PI / 2).translate(0, 0.058, side * 46.25))), grateMaterial);
+  const drain = new THREE.Mesh(mergeGeometries([-1, 1].map((side) => new THREE.PlaneGeometry(78, 0.34).rotateX(-Math.PI / 2).translate(0, 0.058, side * 46.56))), grateMaterial);
   drain.receiveShadow = true;
   scene.add(drain);
   for (const side of [-1, 1]) {
@@ -333,7 +333,7 @@ export function createApronDetails({ scene, farZ, anisotropy }) {
       parts.cylinder(0.23, 0.23, 0.05, '#8e9d96', x, 0.8, at(farZ - 0.4), 0, 0, 0, 14);
     }
   }
-  // Торцы за дорожкой: сектор для прыжков — маты, яма с песком и разбег, люки.
+  // Секторы внутри виражей за воротами: маты, яма с песком и разбег, люки.
   for (const side of [-1, 1]) {
     const at = (x) => side * x;
     const mirror = side * 8; // стороны повёрнуты друг к другу, а не повторяют одна другую
@@ -344,8 +344,8 @@ export function createApronDetails({ scene, farZ, anisotropy }) {
     parts.box(1.3, 0.025, 15, '#486075', at(70.5), 0.036, mirror - side * 9.5);
     parts.box(1.3, 0.032, 0.2, '#f2f2ec', at(70.5), 0.037, mirror - side * 3.2);
     for (const z of [-16, -2, 15]) {
-      parts.box(0.92, 0.018, 0.92, '#4a5154', at(75.5), 0.03, z);
-      parts.box(0.78, 0.022, 0.78, '#70787a', at(75.5), 0.031, z);
+      parts.box(0.92, 0.018, 0.92, '#4a5154', at(73), 0.03, z);
+      parts.box(0.78, 0.022, 0.78, '#70787a', at(73), 0.031, z);
     }
   }
   scene.add(parts.mesh(0.7, 0.15));

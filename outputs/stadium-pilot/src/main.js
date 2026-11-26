@@ -276,6 +276,15 @@ uniform sampler2D uLightMap;
 uniform float uLightAmount;
 uniform vec4 uAoRect;
 uniform float uAoStrength;
+// Карты вида сверху сняты до удлинения торцов (см. END_SHIFT): на трибунах и за ними x возвращается в прежние координаты.
+vec2 bakedUv(vec3 place) {
+  float x = place.x;
+  float far = abs(x);
+  if (abs(place.z) > 52.0) x = sign(x) * (far < 82.73 ? far * 0.8461 : far - 12.73);
+  // На уровне поля за воротами прежний отрезок 54–82,77 м растянут до 54–95,5 м: тень барьера остаётся у барьера.
+  else if (far > 54.0) x = sign(x) * (far < 95.5 ? 54.0 + (far - 54.0) * 0.6933 : far - 12.73);
+  return vec2((x - uAoRect.x) / uAoRect.z, 1.0 - (place.z - uAoRect.y) / uAoRect.w);
+}
 float wHash(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
 float wNoise(vec3 p) {
   vec3 i = floor(p); vec3 f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -284,7 +293,7 @@ float wNoise(vec3 p) {
 }`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
 if (uLightAmount > 0.0) {
-  vec2 lightUv = vec2((vWeatherPos.x - uAoRect.x) / uAoRect.z, 1.0 - (vWeatherPos.z - uAoRect.y) / uAoRect.w);
+  vec2 lightUv = bakedUv(vWeatherPos);
   float bakedLight = texture2D(uLightMap, lightUv).r;
   totalEmissiveRadiance += diffuseColor.rgb * bakedLight * uLightAmount * vec3(1.0, 0.93, 0.78);
 }`)
@@ -302,7 +311,7 @@ if (stainFar < 1.0) {
   stainColor = mix(stainColor, stainColor * vec3(0.86, 0.9, 0.84), smoothstep(0.55, 0.8, wNoise(vWeatherPos * 0.9)));
   diffuseColor.rgb = mix(stainColor, diffuseColor.rgb, stainFar);
 }`}
-vec2 aoUv = vec2((vWeatherPos.x - uAoRect.x) / uAoRect.z, 1.0 - (vWeatherPos.z - uAoRect.y) / uAoRect.w);
+vec2 aoUv = bakedUv(vWeatherPos);
 float bakedAo = texture2D(uAoMap, aoUv).r;
 diffuseColor.rgb *= mix(1.0, bakedAo, uAoStrength);
 // Вертикальные грани (подступенки) темнее горизонтальных: ступени читаются как ступени.
@@ -352,7 +361,10 @@ const steel = qualityMax ? new THREE.MeshStandardMaterial({ color: '#d8dbd2', ro
 
 const buildingRoofs = [];
 const buildingWalls = [];
+// Здания и зелень из OpenStreetMap, попавшие внутрь удлинённой чаши, не рисуются.
+const outsideBowl = (footprint) => !footprint.some(([x, z]) => Math.abs(x) < 128 && Math.abs(z) < 89);
 for (const [height, footprint] of surroundings) {
+  if (!outsideBowl(footprint)) continue;
   const shape = new THREE.Shape();
   shape.moveTo(footprint[0][0], -footprint[0][1]);
   for (const [x, z] of footprint.slice(1)) shape.lineTo(x, -z);
@@ -389,7 +401,7 @@ facadeTexture.repeat.set(0.28, 0.28);
 scene.add(new THREE.Mesh(mergeGeometries(buildingRoofs), material('#969991')));
 scene.add(new THREE.Mesh(mergeGeometries(buildingWalls), new THREE.MeshStandardMaterial({ map: facadeTexture, roughness: 0.95 })));
 for (const geometry of [...buildingRoofs, ...buildingWalls]) geometry.dispose();
-const greenGeometries = greenery.map((footprint) => {
+const greenGeometries = greenery.filter(outsideBowl).map((footprint) => {
   const shape = new THREE.Shape();
   shape.moveTo(footprint[0][0], -footprint[0][1]);
   for (const [x, z] of footprint.slice(1)) shape.lineTo(x, -z);
@@ -484,10 +496,48 @@ function roundedPath(halfWidth, halfDepth, radius, path = new THREE.Path(), sx =
   return path;
 }
 
-// scale: 0 — без изменений, 1 — увеличивается только внешний контур, 2 — внешний и внутренний (трибуны и барьер).
+// Дорожка настоящего размера (400 м по внутренней кромке, 177 × 92,5 м снаружи, совпадает с OpenStreetMap)
+// не помещается между прежними торцами, поэтому первые ряды за воротами отодвинуты до 95,5 м от центра.
+// Ряды и места сохранены: длинные стороны растянуты до |x| = 70 м, дальше всё сдвинуто целиком.
+const TRACK_STRAIGHT = 42.195; // половина прямой
+const TRACK_INNER = 36.5;
+const TRACK_LANE = 1.22;
+const TRACK_OUTER = TRACK_INNER + 8 * TRACK_LANE;
+const END_SHIFT = 95.5 - 71 * bowlScaleX;
+const END_RAMP = 70;
+const warpX = (x) => x + Math.sign(x) * END_SHIFT * Math.min(Math.abs(x) / END_RAMP, 1);
+const warpPoint = (point) => new THREE.Vector2(warpX(point.x), point.y);
+
+// Контур дорожки: две прямые и два полукруга.
+function stadiumPath(radius, path = new THREE.Path()) {
+  path.moveTo(-TRACK_STRAIGHT, -radius);
+  path.lineTo(TRACK_STRAIGHT, -radius);
+  path.absarc(TRACK_STRAIGHT, 0, radius, -Math.PI / 2, Math.PI / 2, false);
+  path.lineTo(-TRACK_STRAIGHT, radius);
+  path.absarc(-TRACK_STRAIGHT, 0, radius, Math.PI / 2, Math.PI * 1.5, false);
+  return path;
+}
+// Плоская фигура на высоте height; hole необязателен.
+function flat(shape, hole, height, surface) {
+  if (hole) shape.holes.push(hole);
+  const mesh = new THREE.Mesh(new THREE.ShapeGeometry(shape, 48), surface);
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.y = height;
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+  return mesh;
+}
+// Скруглённый прямоугольник чаши: растянутый масштабом и удлинённый по торцам.
+function bowlPath(halfWidth, halfDepth, radius, Type = THREE.Path) {
+  const source = roundedPath(halfWidth, halfDepth, radius, new THREE.Path(), bowlScaleX, bowlScaleZ);
+  return new Type(source.getPoints(24).map(warpPoint));
+}
+
+// scale: 0 — без изменений, 2 — чаша (трибуны и барьер): масштаб и удлинение торцов для обоих контуров.
 function ring(outerWidth, outerDepth, innerWidth, innerDepth, radius, height, surface, thickness = 0, scale = 0) {
-  const shape = roundedPath(outerWidth, outerDepth, radius, new THREE.Shape(), scale >= 1 ? bowlScaleX : 1, scale >= 1 ? bowlScaleZ : 1);
-  shape.holes.push(roundedPath(innerWidth, innerDepth, Math.max(radius - (outerWidth - innerWidth), 1), new THREE.Path(), scale === 2 ? bowlScaleX : 1, scale === 2 ? bowlScaleZ : 1));
+  const innerRadius = Math.max(radius - (outerWidth - innerWidth), 1);
+  const shape = scale ? bowlPath(outerWidth, outerDepth, radius, THREE.Shape) : roundedPath(outerWidth, outerDepth, radius, new THREE.Shape());
+  shape.holes.push(scale ? bowlPath(innerWidth, innerDepth, innerRadius) : roundedPath(innerWidth, innerDepth, innerRadius));
   const geometry = thickness
     ? new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: false, curveSegments: 12 })
     : new THREE.ShapeGeometry(shape, 16);
@@ -517,7 +567,7 @@ box(850, 0.5, 850, 0, -0.5, 0, groundMaterial);
   contactGradient.addColorStop(1, 'rgba(20,28,22,0)');
   contactContext.fillStyle = contactGradient;
   contactContext.fillRect(-128, -156, 256, 312);
-  const contact = new THREE.Mesh(new THREE.PlaneGeometry(330 * bowlScaleX, 270 * bowlScaleZ), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(contactCanvas), transparent: true, depthWrite: false }));
+  const contact = new THREE.Mesh(new THREE.PlaneGeometry(330 * bowlScaleX + 2 * END_SHIFT, 270 * bowlScaleZ), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(contactCanvas), transparent: true, depthWrite: false }));
   contact.rotation.x = -Math.PI / 2;
   contact.position.y = -0.2;
   scene.add(contact);
@@ -656,16 +706,20 @@ diffuseColor.rgb = mix(diffuse * vec3(0.48, 0.46, 0.42), diffuseColor.rgb, 0.38)
   paving.customProgramCacheKey = () => 'paving';
   return paving;
 }
-ring(70, 52, 54, 35, 29, 0.02, newLook ? pavingMaterial() : darkConcrete, 0, 1);
+flat(bowlPath(70, 52, 29, THREE.Shape), stadiumPath(TRACK_OUTER), 0.02, newLook ? pavingMaterial() : darkConcrete);
 if (newLook) {
   // Водосточный лоток у дорожки и тёмная отмостка у барьера: разбивают пустую площадку и дают глубину.
-  ring(65.45, 46.45, 65.05, 46.05, 26.4, 0.05, material('#4d5552', 0.9));
+  flat(stadiumPath(TRACK_OUTER + 0.5, new THREE.Shape()), stadiumPath(TRACK_OUTER + 0.1), 0.05, material('#4d5552', 0.9));
   ring(70.4, 52.4, 69.3, 51.3, 29.0, 0.036, material('#737a73', 0.95), 0, 2);
 }
-ring(65, 46, 54, 35, 26, 0.04, track);
+flat(stadiumPath(TRACK_OUTER, new THREE.Shape()), stadiumPath(TRACK_INNER), 0.04, track);
+// Внутри дорожки: серое покрытие секторов за воротами, под полем и вдоль него.
+const infield = material('#8e948f', 0.96);
+weather(infield, { stains: false, ao: 0 });
+flat(stadiumPath(TRACK_INNER, new THREE.Shape()), null, 0.02, infield);
 createApronDetails({ scene, farZ: 52 * bowlScaleZ, anisotropy: pitchAnisotropy });
 for (let i = 0; i <= 8; i += 1) {
-  ring(55 + i * 1.22, 36 + i * 1.22, 54.94 + i * 1.22, 35.94 + i * 1.22, 16 + i * 1.22, 0.07, white);
+  flat(stadiumPath(TRACK_INNER + i * TRACK_LANE + 0.03, new THREE.Shape()), stadiumPath(TRACK_INNER + i * TRACK_LANE - 0.03), 0.07, white);
 }
 ring(94, 76, 69, 51, 38, 0.02, darkConcrete, 0, 2);
 // Номера дорожек и финишная линия на западной прямой (расположение ориентировочное).
@@ -684,7 +738,7 @@ for (let lane = 0; lane < 8; lane += 1) {
   const mark = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.9), new THREE.MeshBasicMaterial({ map: numberTexture, transparent: true, depthWrite: false }));
   mark.rotation.x = -Math.PI / 2;
   mark.rotation.z = Math.PI / 2;
-  mark.position.set(-28, 0.095, -(36.61 + lane * 1.22));
+  mark.position.set(-28, 0.095, -(TRACK_INNER + (lane + 0.5) * TRACK_LANE));
   scene.add(mark);
 }
 const finishCanvas = document.createElement('canvas');
@@ -702,7 +756,7 @@ finishTexture.colorSpace = THREE.SRGBColorSpace;
 finishTexture.magFilter = THREE.NearestFilter;
 const finish = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 9.76), new THREE.MeshBasicMaterial({ map: finishTexture }));
 finish.rotation.x = -Math.PI / 2;
-finish.position.set(30, 0.095, -40.9);
+finish.position.set(30, 0.095, -(TRACK_INNER + 4 * TRACK_LANE));
 scene.add(finish);
 
 
@@ -825,7 +879,9 @@ for (let row = 0; row < rows; row += 1) {
   if (row === 15) ring(83.68, 65.68, 81.68, 63.68, 41.58, y - 0.37, darkConcrete, 0.38, 2);
   standLevels.push(ring(71.6 + step, 53.6 + step, 70.88 + step, 52.88 + step, 29.5 + step, y, row % 2 ? concrete : darkConcrete, 0.38, 2));
   const path = roundedPath(71 + step, 53 + step, 29 + step, new THREE.Path(), bowlScaleX, bowlScaleZ);
-  const points = path.getSpacedPoints(seatsPerRow);
+  // sourcePoints — обход ряда до удлинения (по нему определяются трибуна и проём), points — фактическое положение.
+  const sourcePoints = path.getSpacedPoints(seatsPerRow);
+  const points = sourcePoints.map(warpPoint);
   for (let aisle = 0; aisle < aisles.length; aisle += 1) {
     const first = points[aisle * 100];
     const point = points[aisle * 100 + 2];
@@ -843,14 +899,15 @@ for (let row = 0; row < rows; row += 1) {
     if (i % 100 < 4) continue;
     const point = points[i];
     const next = points[i + 1];
+    const source = sourcePoints[i];
     helper.position.set(point.x, y + 0.27, -point.y);
     helper.rotation.set(0, Math.atan2(next.y - point.y, next.x - point.x), 0);
     helper.updateMatrix();
-    const stand = Math.abs(point.x) / ((71 + step) * bowlScaleX) > Math.abs(point.y) / ((53 + step) * bowlScaleZ)
-      ? (point.x > 0 ? 'north' : 'south')
-      : (point.y > 0 ? 'west' : 'east');
+    const stand = Math.abs(source.x) / ((71 + step) * bowlScaleX) > Math.abs(source.y) / ((53 + step) * bowlScaleZ)
+      ? (source.x > 0 ? 'north' : 'south')
+      : (source.y > 0 ? 'west' : 'east');
     if (stand === 'east' && (row === 13 || row === 14)) continue;
-    if (stand === 'west' && Math.abs(point.x) < 12.5 * bowlScaleX && point.y > 72.5 * bowlScaleZ) continue;
+    if (stand === 'west' && Math.abs(source.x) < 12.5 * bowlScaleX && source.y > 72.5 * bowlScaleZ) continue;
     // rowIndex (0–33, физический ряд) и pathIndex (0–799, позиция вдоль ряда) нужны для карт света и экспорта; row потом переназначается для верхних ярусов.
     const seat = { stand, row: row + 1, rowIndex: row, pathIndex: i, position: helper.position.clone(), matrix: helper.matrix.clone() };
     seatHits.setMatrixAt(seats.length, helper.matrix);
@@ -1236,6 +1293,7 @@ modelLoader.load(asset('west-building.glb'), (model) => {
   });
   // Здание закрывает проём в верхних рядах западной трибуны: после увеличения чаши проём сместился наружу.
   model.scene.position.z = -72.5 * (bowlScaleZ - 1);
+  model.scene.scale.x = 1 + END_SHIFT / END_RAMP; // проём в рядах растянулся вместе с западной трибуной
   scene.add(model.scene);
   renderer.shadowMap.needsUpdate = true;
 }, undefined, (error) => console.error('Не удалось загрузить здание трибуны:', error));
@@ -1277,8 +1335,9 @@ for (const x of [-52.5, 52.5]) {
 }
 const scoreboardFrame = material('#b7bcb7');
 const scoreboardScreen = material('#151d1d');
-for (const z of [-4.5, 4.5]) box(1, 10, 1, -99 * bowlScaleX, 5, z, scoreboardFrame);
-box(1.2, 7.6, 15, -99 * bowlScaleX, 13.8, 0, scoreboardFrame);
+const scoreboardX = warpX(-99 * bowlScaleX);
+for (const z of [-4.5, 4.5]) box(1, 10, 1, scoreboardX, 5, z, scoreboardFrame);
+box(1.2, 7.6, 15, scoreboardX, 13.8, 0, scoreboardFrame);
 const scoreCanvas = document.createElement('canvas');
 scoreCanvas.width = 2048;
 scoreCanvas.height = 960;
@@ -1306,9 +1365,9 @@ scoreTexture.colorSpace = THREE.SRGBColorSpace;
 scoreTexture.anisotropy = 8;
 const scoreLit = new THREE.MeshStandardMaterial({ map: scoreTexture, emissive: '#ffffff', emissiveMap: scoreTexture, emissiveIntensity: 1.2, roughness: 0.35 });
 // Тёмная рамка вокруг экрана табло.
-box(0.04, 7.2, 14.5, -99 * bowlScaleX + 0.62, 13.8, 0, scoreboardScreen);
+box(0.04, 7.2, 14.5, scoreboardX + 0.62, 13.8, 0, scoreboardScreen);
 const scoreScreen = new THREE.Mesh(new THREE.BoxGeometry(0.08, 6.4, 13.7), [scoreLit, scoreboardScreen, scoreboardScreen, scoreboardScreen, scoreboardScreen, scoreboardScreen]);
-scoreScreen.position.set(-99 * bowlScaleX + 0.64, 13.8, 0);
+scoreScreen.position.set(scoreboardX + 0.64, 13.8, 0);
 scene.add(scoreScreen);
 // Четыре мачты освещения по 40 м на восточном краю (модель из work/blender/create_floodlight_masts.py).
 // Светящиеся панели ламп (вечером ярче) повторяют положение ламп модели.
@@ -1366,8 +1425,8 @@ const views = {
   overview: { label: 'Общий вид', position: [200, 170, 245] },
   west: { label: 'Западная трибуна', position: [0, 12, 30], target: [0, 8, -70 * bowlScaleZ] },
   east: { label: 'Восточная трибуна', position: [0, 27, -38], target: [0, 5, 70 * bowlScaleZ] },
-  north: { label: 'Северная трибуна', position: [-38, 27, 0], target: [82 * bowlScaleX, 5, 0] },
-  south: { label: 'Южная трибуна', position: [38, 27, 0], target: [-82 * bowlScaleX, 5, 0] },
+  north: { label: 'Северная трибуна', position: [-38, 27, 0], target: [warpX(82 * bowlScaleX), 5, 0] },
+  south: { label: 'Южная трибуна', position: [38, 27, 0], target: [warpX(-82 * bowlScaleX), 5, 0] },
 };
 let view = 'overview';
 let stage = 'stand';
@@ -2058,7 +2117,9 @@ function mergeStatic() {
 mergeStatic();
 
 setView('overview');
-if (!initialHash && !matchMedia('(prefers-reduced-motion: reduce)').matches && !navigator.connection?.saveData) {
+// Ролик облёта снят до переделки торцов и нумерации, поэтому выключен до пересъёмки (посмотреть: ?intro=1).
+const orbitIntro = new URLSearchParams(location.search).get('intro') === '1';
+if (orbitIntro && !initialHash && !matchMedia('(prefers-reduced-motion: reduce)').matches && !navigator.connection?.saveData) {
   let showIntro = true;
   let finishIntroLoad = () => {};
   const stopIntro = () => {
