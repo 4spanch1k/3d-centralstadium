@@ -91,9 +91,14 @@ renderer.shadowMap.type = qualityMax ? THREE.PCFSoftShadowMap : THREE.PCFShadowM
 renderer.shadowMap.autoUpdate = false;
 renderer.shadowMap.needsUpdate = true;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+// Вид сцены: новый свет и площадка; ?look=old возвращает прежние для сравнения.
+const newLook = new URLSearchParams(location.search).get('look') !== 'old';
+// Дневной свет: сильнее солнце и слабее заполняющий свет неба, чтобы тени и цвета не выцветали.
+const daylight = newLook ? { sun: 3.2, fill: 0.55, env: 0.62, exposure: 1.0 } : { sun: 2.6, fill: 0.75, env: 1, exposure: 1.05 };
+renderer.toneMappingExposure = daylight.exposure;
 
 const scene = new THREE.Scene();
+scene.environmentIntensity = daylight.env;
 scene.background = new THREE.Color('#a7c0c3');
 const horizonPositions = [];
 const horizonColors = [];
@@ -167,9 +172,9 @@ controls.minDistance = 90;
 controls.maxDistance = 560;
 controls.maxPolarAngle = Math.PI / 2.2;
 controls.target.set(0, 4, 0);
-const hemisphere = new THREE.HemisphereLight('#f4f1e2', '#4a5c5a', 0.75);
+const hemisphere = new THREE.HemisphereLight('#f4f1e2', '#4a5c5a', daylight.fill);
 scene.add(hemisphere);
-const sun = new THREE.DirectionalLight('#fff0d0', 2.6);
+const sun = new THREE.DirectionalLight('#fff0d0', daylight.sun);
 sun.position.set(-85, 140, -70);
 sun.castShadow = true;
 const shadowSize = lowPower ? 2048 : midTier ? 3072 : qualityMax ? Math.min(8192, renderer.capabilities.maxTextureSize) : 4096;
@@ -190,7 +195,7 @@ grassTexture.wrapS = THREE.RepeatWrapping;
 grassTexture.wrapT = THREE.RepeatWrapping;
 grassTexture.repeat.set(25, 16);
 grassTexture.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
-const grass = new THREE.MeshStandardMaterial({ map: grassTexture, roughness: 1 });
+const grass = new THREE.MeshStandardMaterial({ map: grassTexture, roughness: 1, color: newLook ? '#c4e0a4' : '#ffffff' });
 // Газон: ambientCG Grass004 (CC0) — нормали и шероховатость только на компьютерах.
 if (!lowPower) {
   const grassDetail = (file) => {
@@ -212,7 +217,9 @@ function concreteMap(file, color = false) {
   if (color) texture.colorSpace = THREE.SRGBColorSpace;
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
-  texture.repeat.set(5, 2);
+  // UV у выдавленных колец идут в метрах: при крупном повторе плитка шла каждые 20 см и выглядела тканью.
+  if (newLook) texture.repeat.set(0.28, 0.28);
+  else texture.repeat.set(5, 2);
   texture.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
   return texture;
 }
@@ -646,7 +653,39 @@ for (const x of [-10, 10]) {
   }
   roofPanel.castShadow = true;
 }
-ring(70, 52, 54, 35, 29, 0.02, darkConcrete, 0, 1);
+// Площадка между дорожкой и барьером: спокойный бетон крупными плитами со швами (отделка предположительная).
+function pavingMaterial() {
+  const map = concreteMap(asset('concrete-diff.webp'), true);
+  map.repeat.set(0.16, 0.16);
+  const paving = new THREE.MeshStandardMaterial({ color: '#b4b6ae', map, roughness: 0.96 });
+  weather(paving, { stains: false });
+  const previous = paving.onBeforeCompile;
+  paving.onBeforeCompile = (shader, context) => {
+    previous.call(paving, shader, context);
+    // Фактура «повреждённого бетона» приглушена: площадка должна быть чистой, а не в пятнах.
+    shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
+diffuseColor.rgb = mix(diffuse * vec3(0.48, 0.46, 0.42), diffuseColor.rgb, 0.38);`)
+      .replace('#include <alphamap_fragment>', `#include <alphamap_fragment>
+{
+  const float slab = 3.0;
+  vec2 place = vWeatherPos.xz;
+  vec2 offset = abs(mod(place + slab * 0.5, slab) - slab * 0.5);
+  vec2 width = max(fwidth(place), vec2(0.002));
+  vec2 joint = (1.0 - smoothstep(vec2(0.022), vec2(0.022) + width, offset)) * clamp(1.0 - width * 3.0, 0.0, 1.0);
+  // Лёгкий разный тон плит убирает однообразие.
+  diffuseColor.rgb *= 0.95 + 0.09 * wHash(vec3(floor(place / slab), 1.0));
+  diffuseColor.rgb *= 1.0 - 0.45 * max(joint.x, joint.y);
+}`);
+  };
+  paving.customProgramCacheKey = () => 'paving';
+  return paving;
+}
+ring(70, 52, 54, 35, 29, 0.02, newLook ? pavingMaterial() : darkConcrete, 0, 1);
+if (newLook) {
+  // Водосточный лоток у дорожки и тёмная отмостка у барьера: разбивают пустую площадку и дают глубину.
+  ring(65.45, 46.45, 65.05, 46.05, 26.4, 0.05, material('#4d5552', 0.9));
+  ring(70.4, 52.4, 69.3, 51.3, 29.0, 0.036, material('#737a73', 0.95), 0, 2);
+}
 ring(65, 46, 54, 35, 26, 0.04, track);
 for (let i = 0; i <= 8; i += 1) {
   ring(55 + i * 1.22, 36 + i * 1.22, 54.94 + i * 1.22, 35.94 + i * 1.22, 16 + i * 1.22, 0.07, white);
@@ -2460,7 +2499,7 @@ renderer.setAnimationLoop(() => {
 // Переключатель времени суток: день и вечер (вечерний свет приблизительный).
 {
   const presets = {
-    day: { sun: '#fff0d0', sunPower: 2.6, sunPosition: [-85, 140, -70], sky: '#f4f1e2', ground: '#4a5c5a', fill: 0.75, exposure: 1.05, env: 1, backdrop: 1, lamps: 0.6 },
+    day: { sun: '#fff0d0', sunPower: daylight.sun, sunPosition: [-85, 140, -70], sky: '#f4f1e2', ground: '#4a5c5a', fill: daylight.fill, exposure: daylight.exposure, env: daylight.env, backdrop: 1, lamps: 0.6 },
     evening: { sun: '#ff9f55', sunPower: 0.7, sunPosition: [-150, 38, -40], sky: '#8f9cc4', ground: '#3b3a4a', fill: 0.5, exposure: 0.95, env: 0.22, backdrop: 0.38, lamps: 1.1 },
   };
   // Прожекторы: четыре мачты по углам освещают поле и трибуны тёплым белым светом (только вечером, без теней).
