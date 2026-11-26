@@ -2197,9 +2197,6 @@ setTimeout(hideLoading, 20000);
 // Предел по числу пикселей бережёт видеопамять; ?sharp=0 выключает для сравнения.
 const sharpAtRest = new URLSearchParams(location.search).get('sharp') !== '0';
 let restSharp = false; // холст сейчас в разрешении покоя
-let pointerHeld = false; // пока палец на экране, разрешение не меняем
-window.addEventListener('pointerdown', () => { pointerHeld = true; }, { passive: true, capture: true });
-for (const name of ['pointerup', 'pointercancel', 'blur']) window.addEventListener(name, () => { pointerHeld = false; }, { passive: true, capture: true });
 function restPixelRatio() {
   const budget = touchDevice ? 3.4e6 : 8.4e6;
   const wanted = Math.min(window.devicePixelRatio, lowPower ? 2 : 3, Math.sqrt(budget / (window.innerWidth * window.innerHeight)));
@@ -2317,7 +2314,7 @@ function refineStep() {
   refine.index += 1;
   if (refine.index >= refine.n) {
     refine.done = true;
-    if (fpsPanel) fpsPanel.textContent += `\nв покое: ${canvas.width}×${canvas.height} (${renderer.getPixelRatio().toFixed(2)}×)`;
+    if (fpsPanel) fpsPanel.textContent += `\nв покое: ${canvas.width}×${canvas.height} (${renderer.getPixelRatio().toFixed(2)}×)${sharpAtRest ? '' : ' · чёткий кадр выключен: ?sharp=0'}`;
   }
 }
 refine.step = refineStep;
@@ -2363,7 +2360,7 @@ renderer.setAnimationLoop(() => {
   }
   // Смена разрешения здесь, прямо перед отрисовкой этого же кадра (иначе мелькнул бы пустой холст).
   // Вечером кадр собирает композитор в своём разрешении, поэтому там холст не увеличиваем.
-  setRestSharp(sharpAtRest && idleLong && !pointerHeld && !(composer && (qualityMax || eveningMode)));
+  setRestSharp(sharpAtRest && idleLong && !(composer && (qualityMax || eveningMode)));
   if (cameraTransition) {
     const transition = cameraTransition;
     const progress = transition.duration ? Math.min((now - transition.start) / transition.duration, 1) : 1;
