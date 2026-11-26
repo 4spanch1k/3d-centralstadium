@@ -1,4 +1,5 @@
 import { createPlanLayer } from './planLayer.js';
+import { createApronDetails, createBoards, createDugouts } from './pitchSide.js';
 import { createConcreteContact, createSeatLight } from './seatLight.js';
 import { createLoadQueue } from './loadQueue.js';
 import * as THREE from 'three';
@@ -607,57 +608,9 @@ for (const side of [-1, 1]) {
     scene.add(flag);
   }
 }
-const boardCanvas = document.createElement('canvas');
-boardCanvas.width = 1024;
-boardCanvas.height = 64;
-const boardContext = boardCanvas.getContext('2d');
-['#1f5fa8', '#f1f1ea', '#c9362f', '#e0a617', '#1d2a33', '#2f8f6a'].forEach((color, index) => {
-  boardContext.fillStyle = color;
-  boardContext.fillRect(index * 170.67, 0, 171, 64);
-  boardContext.fillStyle = color === '#f1f1ea' ? '#1d2a33' : '#f1f1ea';
-  boardContext.fillRect(index * 170.67 + 30, 28, 110, 8);
-});
-const boardTexture = new THREE.CanvasTexture(boardCanvas);
-boardTexture.colorSpace = THREE.SRGBColorSpace;
-boardTexture.wrapS = THREE.RepeatWrapping;
-const boardMaterial = new THREE.MeshStandardMaterial({ map: boardTexture, roughness: 0.55, emissive: '#ffffff', emissiveMap: boardTexture, emissiveIntensity: 0.35 });
-for (const [length, x, z, turn] of [[105, 0, -35.6, 0], [105, 0, 35.6, 0], [71, -54.4, 0, Math.PI / 2], [71, 54.4, 0, Math.PI / 2]]) {
-  const texture = boardTexture.clone();
-  texture.repeat.set(length / 17.5, 1);
-  texture.needsUpdate = true;
-  const board = new THREE.Mesh(new THREE.BoxGeometry(length, 0.9, 0.12), new THREE.MeshStandardMaterial({ map: texture, roughness: 0.55, emissive: '#ffffff', emissiveMap: texture, emissiveIntensity: 0.35 }));
-  board.position.set(x, 0.45, z);
-  board.rotation.y = turn;
-  board.castShadow = true;
-  scene.add(board);
-}
-
-// Скамейки запасных на западной стороне поля (ориентировочно).
-const dugoutGlass = new THREE.MeshStandardMaterial({ color: '#9fc4cf', transparent: true, opacity: 0.28, roughness: 0.1, depthWrite: false });
-const dugoutFrame = material('#2a3236', 0.5);
-const dugoutSeat = material('#c9362f', 0.6);
-for (const x of [-10, 10]) {
-  const z = -38.4;
-  const roofPanel = new THREE.Mesh(new THREE.BoxGeometry(7, 0.08, 1.6), dugoutGlass);
-  roofPanel.position.set(x, 2.1, z);
-  const back = new THREE.Mesh(new THREE.BoxGeometry(7, 1.9, 0.05), dugoutGlass);
-  back.position.set(x, 1.1, z - 0.8);
-  const bench = new THREE.Mesh(new THREE.BoxGeometry(6.4, 0.08, 0.4), dugoutSeat);
-  bench.position.set(x, 0.42, z - 0.4);
-  const backrest = new THREE.Mesh(new THREE.BoxGeometry(6.4, 0.4, 0.06), dugoutSeat);
-  backrest.position.set(x, 0.72, z - 0.62);
-  scene.add(roofPanel, back, bench, backrest);
-  for (const dx of [-3.5, 3.5]) {
-    const post = new THREE.Mesh(new THREE.BoxGeometry(0.08, 2.1, 0.08), dugoutFrame);
-    post.position.set(x + dx, 1.05, z + 0.75);
-    post.castShadow = true;
-    scene.add(post);
-    const postBack = post.clone();
-    postBack.position.z = z - 0.78;
-    scene.add(postBack);
-  }
-  roofPanel.castShadow = true;
-}
+const pitchAnisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
+createBoards({ scene, anisotropy: pitchAnisotropy });
+createDugouts({ scene, anisotropy: pitchAnisotropy });
 // Площадка между дорожкой и барьером: спокойный бетон крупными плитами со швами (отделка предположительная).
 function pavingMaterial() {
   const map = concreteMap(asset('concrete-diff.webp'), true);
@@ -692,6 +645,7 @@ if (newLook) {
   ring(70.4, 52.4, 69.3, 51.3, 29.0, 0.036, material('#737a73', 0.95), 0, 2);
 }
 ring(65, 46, 54, 35, 26, 0.04, track);
+createApronDetails({ scene, farZ: 52 * bowlScaleZ, anisotropy: pitchAnisotropy });
 for (let i = 0; i <= 8; i += 1) {
   ring(55 + i * 1.22, 36 + i * 1.22, 54.94 + i * 1.22, 35.94 + i * 1.22, 16 + i * 1.22, 0.07, white);
 }
@@ -1772,8 +1726,9 @@ async function tryPanorama(position, token) {
 let panoToken = 0;
 // Номер версии набора панорам: меняйте при перерендере, чтобы кэш на устройствах обновился.
 const PANO_VERSION = 2;
-// На узком (портретном) экране угол обзора шире, чтобы в кадр попадало поле, а не только ряд кресел.
-const seatFov = () => (camera.aspect < 0.8 ? 80 : 64);
+// На узком (портретном) экране угол по вертикали больше, чтобы поле помещалось по ширине. 70° вместо прежних 80°:
+// поле крупнее и чётче, остальное доступно поворотом.
+const seatFov = () => (camera.aspect < 0.8 ? 70 : 64);
 const panoCacheLimit = lowPower ? 2 : 4;
 // Загружает и сразу выгружает на видеокарту панораму; в кэше держим ограниченное число (память).
 async function getPanoTexture(file) {
