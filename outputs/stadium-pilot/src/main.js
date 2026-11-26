@@ -1,4 +1,5 @@
 import { createPlanLayer } from './planLayer.js';
+import { patchStandConcrete, patchStandSeat } from './standShading.js';
 import { createApronDetails, createBoards, createDugouts } from './pitchSide.js';
 import { createConcreteContact, createSeatLight } from './seatLight.js';
 import { createLoadQueue } from './loadQueue.js';
@@ -329,6 +330,12 @@ const blueSeats = seatMaterial('#1f5fa8');
 const greenSeats = seatMaterial('#2f8f6a');
 // Кресла тоже получают запечённое затенение по месту установки (слабее, чтобы не считать тень кресла дважды).
 for (const seatMaterial of [yellowSeats, blueSeats, greenSeats]) weather(seatMaterial, { stains: false, ao: 0.35 });
+// Читаемые дальние трибуны (разный тон, ряды, дымка); ?stands=old или ?look=old показывает как было.
+const newStands = newLook && new URLSearchParams(location.search).get('stands') !== 'old';
+if (newStands) {
+  for (const surface of [yellowSeats, blueSeats, greenSeats]) patchStandSeat(surface);
+  for (const surface of [concrete, darkConcrete]) patchStandConcrete(surface);
+}
 // Эксперимент: запечённое затенение кресел и ступеней из Blender, только по ?light=1 (сила: &lightStrength=0..1).
 const lightParams = new URLSearchParams(location.search);
 const seatLight = lightParams.get('light') === '1' ? createSeatLight({
@@ -1093,14 +1100,15 @@ if (planLayer) loadQueue.add('план секторов', 10, () => planLayer.pr
     scene.add(sign);
   });
 }
-// Небольшой разброс яркости кресел: выгоревшие и более тёмные места.
+// Цвет экземпляра нужен для подсветки выбора; разброс тонов кресел считается в шейдере (standShading.js),
+// а со старым видом (?stands=old) задаётся здесь.
 {
   let seed = 11;
   const random = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
   const shade = new THREE.Color();
   for (const [mesh, total] of [[yellow, yellowCount], [blue, blueCount], [green, greenCount]]) {
     for (let i = 0; i < total; i += 1) {
-      const value = 0.82 + random() * 0.18;
+      const value = newStands ? 1 : 0.82 + random() * 0.18;
       mesh.setColorAt(i, shade.setRGB(value, value, value));
     }
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
