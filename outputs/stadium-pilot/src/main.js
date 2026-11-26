@@ -1,3 +1,4 @@
+import { patchPitchGrass } from './pitchGrass.js';
 import { createPlanLayer } from './planLayer.js';
 import { patchStandConcrete, patchStandSeat } from './standShading.js';
 import { createApronDetails, createBoards, createDugouts } from './pitchSide.js';
@@ -313,6 +314,9 @@ diffuseColor.rgb *= mix(0.8, 1.0, smoothstep(0.25, 0.75, abs(faceNormal.y)));`);
 weather(concrete);
 weather(darkConcrete);
 weather(grass, { stains: false });
+// Покос, фактура, потёртости и разметка в шейдере; ?grass=old или ?look=old показывает прежнее поле.
+const newGrass = newLook && new URLSearchParams(location.search).get('grass') !== 'old';
+if (newGrass) patchPitchGrass(grass);
 const trackNormal = new THREE.TextureLoader().load(asset('track-normal.jpg'), undefined, undefined, (error) => console.error('Не удалось загрузить фактуру дорожек', error));
 trackNormal.wrapS = THREE.RepeatWrapping;
 trackNormal.wrapT = THREE.RepeatWrapping;
@@ -523,6 +527,9 @@ farGround.rotation.x = -Math.PI / 2;
 farGround.position.y = -0.8;
 scene.add(farGround);
 box(105, 0.12, 68, 0, 0, 0, grass);
+// Прежние полосы, потёртости и линии отдельными плоскостями: нужны для ?grass=old и для экспорта в Blender,
+// на сайте их заменяет шейдер газона.
+const flatMarksStart = scene.children.length;
 const mowingShade = new THREE.MeshBasicMaterial({ color: '#1c452c', transparent: true, opacity: 0.12, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
 for (let strip = 0; strip < 5; strip += 1) {
   const stripe = new THREE.Mesh(new THREE.PlaneGeometry(10.5, 68), mowingShade);
@@ -580,6 +587,10 @@ const centerSpot = new THREE.Mesh(new THREE.CircleGeometry(0.2, 16), white);
 centerSpot.rotation.x = -Math.PI / 2;
 centerSpot.position.y = 0.125;
 scene.add(centerSpot);
+const flatMarks = new THREE.Group();
+flatMarks.add(...scene.children.slice(flatMarksStart));
+flatMarks.visible = !newGrass;
+scene.add(flatMarks);
 
 
 const cornerFlags = [];
@@ -2109,6 +2120,8 @@ if (location.search.includes('debug')) {
       exportLegs = new THREE.InstancedMesh(supportGeometry, detailLegs.material, seats.length);
       seats.forEach((seat, index) => exportLegs.setMatrixAt(index, seat.hidden ? hiddenMatrix : seat.matrix));
       scene.add(exportLegs);
+      hidden.push([flatMarks, flatMarks.visible]); // разметка из шейдера в Blender не попадает, отдаём плоскости
+      flatMarks.visible = true;
       scene.traverse((object) => {
         if (object.isMesh && (object === sectorHits || object === seatHits)) { hidden.push([object, object.visible]); object.visible = false; }
         // Прозрачные плоскости с текстурой (пятна потёртости газона, мягкая тень у основания, сетки, номера рядов) в Blender импортируются непрозрачными и дают чёрные пятна.
