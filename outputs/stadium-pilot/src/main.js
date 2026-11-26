@@ -2391,7 +2391,7 @@ renderer.setAnimationLoop(() => {
 // Переключатель времени суток: день и вечер (вечерний свет приблизительный).
 {
   const presets = {
-    day: { sun: '#fff0d0', sunPower: 2.6, sunPosition: [-85, 140, -70], sky: '#f4f1e2', ground: '#4a5c5a', fill: 0.75, exposure: 1.05, env: 0.45, backdrop: 1, lamps: 0.6 },
+    day: { sun: '#fff0d0', sunPower: 2.6, sunPosition: [-85, 140, -70], sky: '#f4f1e2', ground: '#4a5c5a', fill: 0.75, exposure: 1.05, env: 1, backdrop: 1, lamps: 0.6 },
     evening: { sun: '#ff9f55', sunPower: 0.7, sunPosition: [-150, 38, -40], sky: '#8f9cc4', ground: '#3b3a4a', fill: 0.5, exposure: 0.95, env: 0.22, backdrop: 0.38, lamps: 1.1 },
   };
   // Прожекторы: четыре мачты по углам освещают поле и трибуны тёплым белым светом (только вечером, без теней).
