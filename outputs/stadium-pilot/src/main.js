@@ -2193,8 +2193,30 @@ const hideLoading = () => {
 };
 THREE.DefaultLoadingManager.onLoad = hideLoading;
 setTimeout(hideLoading, 20000);
+// Чёткий кадр в покое в родном разрешении экрана: движение считается быстрее и мягче, а остановившаяся картинка резкая.
+// Предел по числу пикселей бережёт видеопамять; ?sharp=0 выключает для сравнения.
+const sharpAtRest = new URLSearchParams(location.search).get('sharp') !== '0';
+let restSharp = false; // холст сейчас в разрешении покоя
+let pointerHeld = false; // пока палец на экране, разрешение не меняем
+window.addEventListener('pointerdown', () => { pointerHeld = true; }, { passive: true, capture: true });
+for (const name of ['pointerup', 'pointercancel', 'blur']) window.addEventListener(name, () => { pointerHeld = false; }, { passive: true, capture: true });
+function restPixelRatio() {
+  const budget = touchDevice ? 3.4e6 : 8.4e6;
+  const wanted = Math.min(window.devicePixelRatio, lowPower ? 2 : 3, Math.sqrt(budget / (window.innerWidth * window.innerHeight)));
+  return Math.max(pixelRatio, wanted);
+}
+function setRestSharp(on) {
+  if (on === restSharp) return;
+  const ratio = on ? restPixelRatio() : pixelRatio;
+  restSharp = on;
+  if (renderer.getPixelRatio() === ratio) return;
+  // Меняется только холст и накопитель; рабочее разрешение движения (pixelRatio) остаётся прежним.
+  renderer.setPixelRatio(ratio);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
 function applyPixelRatio(value) {
   pixelRatio = value;
+  restSharp = false;
   renderer.setPixelRatio(value);
   renderer.setSize(window.innerWidth, window.innerHeight);
   composer?.setPixelRatio(value);
@@ -2293,7 +2315,10 @@ function refineStep() {
   renderer.setRenderTarget(null);
   renderer.render(refine.quadScene, refine.quadCamera);
   refine.index += 1;
-  if (refine.index >= refine.n) refine.done = true;
+  if (refine.index >= refine.n) {
+    refine.done = true;
+    if (fpsPanel) fpsPanel.textContent += `\nв покое: ${canvas.width}×${canvas.height} (${renderer.getPixelRatio().toFixed(2)}×)`;
+  }
 }
 refine.step = refineStep;
 // Телефон может отнять у вкладки видеопамять (потеря WebGL-контекста). Three.js восстанавливает ресурсы сам,
@@ -2315,10 +2340,11 @@ renderer.setAnimationLoop(() => {
   const gap = now - lastRender;
   if (gap < (active ? 15 : 50)) return;
   // Кадр уже уточнён и ничего не менялось: больше не рисуем (экономит батарею).
-  const idleLong = refine.n > 0 && now - lastActivity > 200 && !cameraTransition;
+  // При чётком кадре ждём чуть дольше, чтобы не менять разрешение на коротких паузах внутри движения.
+  const idleLong = refine.n > 0 && now - lastActivity > (sharpAtRest ? 320 : 200) && !cameraTransition;
   if (idleLong && refine.done) return;
   lastRender = now;
-  if (fpsPanel && gap < 500) {
+  if (fpsPanel && !idleLong && gap < 500) {
     fpsGaps.push(gap);
     if (now - fpsShownAt > 1000 && fpsGaps.length > 5) {
       fpsShownAt = now;
@@ -2335,6 +2361,9 @@ renderer.setAnimationLoop(() => {
     applyPixelRatio(pendingPixelRatio);
     pendingPixelRatio = null;
   }
+  // Смена разрешения здесь, прямо перед отрисовкой этого же кадра (иначе мелькнул бы пустой холст).
+  // Вечером кадр собирает композитор в своём разрешении, поэтому там холст не увеличиваем.
+  setRestSharp(sharpAtRest && idleLong && !pointerHeld && !(composer && (qualityMax || eveningMode)));
   if (cameraTransition) {
     const transition = cameraTransition;
     const progress = transition.duration ? Math.min((now - transition.start) / transition.duration, 1) : 1;
