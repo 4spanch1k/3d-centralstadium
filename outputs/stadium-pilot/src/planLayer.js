@@ -1,6 +1,10 @@
 // Готовый план секторов: картинка + маска идентификаторов (R + 256·G = номер сектора) вместо живой 3D-сцены.
 // Нужен слабым устройствам и телефонам: чёткий кадр без нагрузки на GPU, выбор сектора по маске за O(1).
 // Подсветка рисуется на 2D-слое по контурам из sectors.json: выбранный сектор яркий с золотой кромкой, остальные приглушены.
+// Версия готового плана: меняйте вместе с файлами pre/plan. Иначе кэш на устройстве отдаст старую маску
+// к новым номерам секторов, и нажатие откроет чужой сектор.
+const PLAN_VERSION = 2;
+
 export function createPlanLayer({ asset, getArea, onHover, onPick }) {
   const root = document.createElement('div');
   root.id = 'plan-layer';
@@ -23,8 +27,8 @@ export function createPlanLayer({ asset, getArea, onHover, onPick }) {
 
   async function load(name) {
     const [meta, maskBlob, imageBlob] = await Promise.all([
-      fetch(asset('pre/plan/sectors.json')).then((r) => r.json()),
-      fetch(asset(`pre/plan/plan-${name}-id.png`)).then((r) => r.blob()),
+      fetch(asset(`pre/plan/sectors.json?v=${PLAN_VERSION}`)).then((r) => r.json()),
+      fetch(asset(`pre/plan/plan-${name}-id.png?v=${PLAN_VERSION}`)).then((r) => r.blob()),
       fetch(asset(`pre/plan/plan-${name}.webp`)).then((r) => r.blob()),
     ]);
     const [width, height] = meta.sizes[name];
