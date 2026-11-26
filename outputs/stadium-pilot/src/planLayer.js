@@ -15,6 +15,7 @@ export function createPlanLayer({ asset, getArea, onHover, onPick }) {
   let variant = null; // 'phone' | 'desktop'
   let data = null; // { ids, width, height, sectors: Map, crop }
   let loading = null;
+  const cache = new Map(); // имя варианта → обещание готовых данных
   let active = false;
   let lit = null;
 
@@ -49,11 +50,13 @@ export function createPlanLayer({ asset, getArea, onHover, onPick }) {
     }
     const margin = Math.round((right - left) * 0.04);
     const crop = [Math.max(0, left - margin), Math.max(0, top - margin), Math.min(width, right + margin), Math.min(height, bottom + margin)];
-    image.src = URL.createObjectURL(imageBlob);
-    await image.decode().catch(() => {});
-    overlay.width = width;
-    overlay.height = height;
-    return { ids, width, height, sectors, crop };
+    const url = URL.createObjectURL(imageBlob);
+    return { ids, width, height, sectors, crop, url };
+  }
+  // Данные варианта читаются один раз: заранее из очереди или при первом показе. После ошибки можно повторить.
+  function obtain(name) {
+    if (!cache.has(name)) cache.set(name, load(name).catch((error) => { cache.delete(name); throw error; }));
+    return cache.get(name);
   }
 
   function layout() {
@@ -160,10 +163,17 @@ export function createPlanLayer({ asset, getArea, onHover, onPick }) {
     active = true;
     if (!data || variant !== wanted) {
       variant = wanted;
-      const request = (loading = load(wanted));
+      const request = (loading = obtain(wanted));
       try {
         const loaded = await request;
         if (request !== loading) return;
+        if (image.src !== loaded.url) {
+          image.src = loaded.url;
+          await image.decode().catch(() => {});
+          if (request !== loading) return;
+        }
+        overlay.width = loaded.width;
+        overlay.height = loaded.height;
         data = loaded;
       } catch (error) {
         console.warn('План секторов не загрузился', error);
@@ -191,6 +201,7 @@ export function createPlanLayer({ asset, getArea, onHover, onPick }) {
   return {
     show,
     hide,
+    prefetch: () => obtain(pickVariant()),
     highlight: (sector) => { if (data && sector !== lit) draw(sector); else lit = sector; },
     get ready() { return active && !!data; },
   };

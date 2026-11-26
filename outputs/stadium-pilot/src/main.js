@@ -1,5 +1,6 @@
 import { createPlanLayer } from './planLayer.js';
 import { createConcreteContact, createSeatLight } from './seatLight.js';
+import { createLoadQueue } from './loadQueue.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -135,7 +136,11 @@ const horizonMesh = new THREE.Mesh(horizonGeometry, new THREE.MeshBasicMaterial(
 horizonMesh.layers.set(1);
 scene.add(horizonMesh);
 
-// Небо грузится в два шага: лёгкое 1k (1 МБ) сразу, а чёткое 2k (4 МБ) позже в фоне, когда сцена уже показана.
+const loadQueue = createLoadQueue();
+// Медленная сеть (где браузер это сообщает): без видео и чёткого неба.
+const slowNetwork = Boolean(navigator.connection?.saveData) || /(^|-)(2g|3g)$/.test(navigator.connection?.effectiveType || '');
+// Небо грузится в два шага: лёгкое 1k (1 МБ) сразу, а чёткое 2k (4 МБ) в конце очереди, когда сцена уже показана.
+let sharpSky = false;
 function applySky(texture) {
   texture.mapping = THREE.EquirectangularReflectionMapping;
   const previous = scene.background;
@@ -146,9 +151,13 @@ function applySky(texture) {
   markDirty?.();
 }
 new HDRLoader().load(asset('sky.hdr'), (texture) => {
-  applySky(texture);
-  if (!lowPower && !midTier) setTimeout(() => new HDRLoader().load(asset('sky-2k.hdr'), applySky, undefined, () => {}), 3000);
+  if (sharpSky) texture.dispose();
+  else applySky(texture);
 }, undefined, (error) => console.error('Не удалось загрузить небо', error));
+if (!lowPower && !midTier && !slowNetwork) loadQueue.add('чёткое небо', 40, () => new HDRLoader().loadAsync(asset('sky-2k.hdr')).then((texture) => {
+  sharpSky = true;
+  applySky(texture);
+}));
 const camera = new THREE.PerspectiveCamera(38, window.innerWidth / window.innerHeight, 0.1, 7500);
 camera.layers.enable(1);
 const controls = new OrbitControls(camera, canvas);
@@ -729,16 +738,15 @@ const yellow = new THREE.InstancedMesh(lowSeatGeometry, yellowSeats, rows * seat
 const blue = new THREE.InstancedMesh(lowSeatGeometry, blueSeats, rows * seatsPerRow);
 const green = new THREE.InstancedMesh(lowSeatGeometry, greenSeats, rows * seatsPerRow);
 const modelLoader = new GLTFLoader();
-// Горы подгружаются чуть позже первого кадра: стадион появляется быстрее, особенно на телефоне.
-setTimeout(() => {
-  modelLoader.load(asset('alatau-terrain.glb'), (model) => {
-    model.scene.traverse((object) => {
-      if (object.isMesh) object.material = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
-      object.layers.set(1);
-    });
-    scene.add(model.scene);
-  }, undefined, (error) => console.error('Не удалось загрузить рельеф гор:', error));
-}, 1500);
+// Горы подгружаются после первого кадра: стадион появляется быстрее, особенно на телефоне.
+loadQueue.add('рельеф гор', 30, () => modelLoader.loadAsync(asset('alatau-terrain.glb')).then((model) => {
+  model.scene.traverse((object) => {
+    if (object.isMesh) object.material = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
+    object.layers.set(1);
+  });
+  scene.add(model.scene);
+  markDirty();
+}));
 modelLoader.load(asset('stadium-seat.glb'), (model) => {
   const seat = model.scene.getObjectByName('Stadium_seat');
   if (!seat?.isMesh) {
@@ -1030,6 +1038,8 @@ planLayer = usePlanImage ? createPlanLayer({
     pickSector(info.stand, sector);
   },
 }) : null;
+// На телефонах план нужен следующим шагом, поэтому готовится первым в очереди.
+if (planLayer) loadQueue.add('план секторов', 10, () => planLayer.prefetch());
 // Таблички с номерами секторов над верхним рядом каждого сектора (положение ориентировочное).
 {
   const topBySector = new Map();
@@ -2030,25 +2040,40 @@ mergeStatic();
 setView('overview');
 if (!initialHash && !matchMedia('(prefers-reduced-motion: reduce)').matches && !navigator.connection?.saveData) {
   let showIntro = true;
+  let finishIntroLoad = () => {};
   const stopIntro = () => {
+    if (!showIntro) return;
     showIntro = false;
     introVideo.classList.remove('visible');
     introVideo.pause();
+    finishIntroLoad();
+    // Ролик больше не нужен: прерываем его загрузку после того, как он погас.
+    setTimeout(() => { introVideo.removeAttribute('src'); introVideo.load(); }, 1200);
   };
   document.addEventListener('pointerdown', stopIntro, { once: true, capture: true });
   document.addEventListener('keydown', stopIntro, { once: true, capture: true });
   window.addEventListener('hashchange', stopIntro, { once: true });
   const size = lowPower || window.innerWidth <= 700 ? 'phone' : 'desktop';
-  introVideo.poster = asset(`intro-${size}.jpg`);
-  const format = introVideo.canPlayType('video/webm; codecs="vp9"') ? 'webm' : 'mp4';
-  // ?v=2: сбрасывает кэш браузера, где мог остаться старый ролик с чёрными пятнами на поле.
-  introVideo.src = `${asset(`stadium-orbit-${size}.${format}`)}?v=2`;
-  introVideo.play().then(() => {
-    if (showIntro) introVideo.classList.add('visible');
-    else introVideo.pause();
-  }).catch(() => {
-    introVideo.hidden = true;
-  });
+  // Постер (около 130 КБ) показывается сразу, само видео берётся из очереди.
+  const poster = new Image();
+  poster.onload = () => { if (showIntro) introVideo.classList.add('visible'); };
+  poster.src = asset(`intro-${size}.jpg`);
+  introVideo.poster = poster.src;
+  if (!slowNetwork) loadQueue.add('видео облёта', 20, () => new Promise((resolve) => {
+    if (!showIntro) { resolve(); return; }
+    finishIntroLoad = resolve;
+    const format = introVideo.canPlayType('video/webm; codecs="vp9"') ? 'webm' : 'mp4';
+    introVideo.addEventListener('canplaythrough', resolve, { once: true });
+    // ?v=2: сбрасывает кэш браузера, где мог остаться старый ролик с чёрными пятнами на поле.
+    introVideo.src = `${asset(`stadium-orbit-${size}.${format}`)}?v=2`;
+    introVideo.play().then(() => {
+      if (showIntro) introVideo.classList.add('visible');
+      else introVideo.pause();
+    }).catch(() => {
+      if (showIntro) introVideo.hidden = true;
+      resolve();
+    });
+  }));
 }
 // Затенение в контактах (ambient occlusion): тёмные стыки между рядами, креслами и ступенями.
 // Включается только на десктопе; ?fx=0 в адресе отключает эффект.
@@ -2160,7 +2185,11 @@ THREE.DefaultLoadingManager.onProgress = (url, loaded, total) => {
   markDirty();
 };
 const loadingNote = document.querySelector('#loading');
-const hideLoading = () => { if (loadingNote) loadingNote.hidden = true; markDirty(); };
+const hideLoading = () => {
+  if (loadingNote) loadingNote.hidden = true;
+  markDirty();
+  loadQueue.start(); // главное загружено (или вышло время): можно брать остальное
+};
 THREE.DefaultLoadingManager.onLoad = hideLoading;
 setTimeout(hideLoading, 20000);
 function applyPixelRatio(value) {
@@ -2437,6 +2466,8 @@ renderer.setAnimationLoop(() => {
   glow.visible = false;
   scene.add(glow);
   let mode = 'day';
+  // Карта вечернего света берётся заранее, как только к переключателю потянулись.
+  for (const intent of ['pointerenter', 'pointerdown', 'focus']) toggle.addEventListener(intent, loadEveningLight, { once: true });
   toggle.addEventListener('click', () => {
     mode = mode === 'day' ? 'evening' : 'day';
     const preset = presets[mode];
