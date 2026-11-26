@@ -1,4 +1,5 @@
 import { createPlanLayer } from './planLayer.js';
+import { createSeatLight } from './seatLight.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -306,6 +307,14 @@ const blueSeats = seatMaterial('#1f5fa8');
 const greenSeats = seatMaterial('#2f8f6a');
 // Кресла тоже получают запечённое затенение по месту установки (слабее, чтобы не считать тень кресла дважды).
 for (const seatMaterial of [yellowSeats, blueSeats, greenSeats]) weather(seatMaterial, { stains: false, ao: 0.35 });
+// Эксперимент: запечённое затенение кресел из Blender, только по ?light=1 (сила: &lightStrength=0..1).
+const lightParams = new URLSearchParams(location.search);
+const seatLight = lightParams.get('light') === '1' ? createSeatLight({
+  url: asset('pre/light/day/seat-ao.png'),
+  strength: THREE.MathUtils.clamp(Number(lightParams.get('lightStrength') ?? 0.6) || 0, 0, 1),
+  onReady: () => markDirty(),
+}) : null;
+if (seatLight) for (const surface of [yellowSeats, blueSeats, greenSeats]) seatLight.patch(surface);
 const steel = qualityMax ? new THREE.MeshStandardMaterial({ color: '#d8dbd2', roughness: 0.38, metalness: 0.7 }) : material('#d8dbd2', 0.55);
 
 const buildingRoofs = [];
@@ -738,7 +747,10 @@ modelLoader.load(asset('stadium-seat.glb'), (model) => {
   }
   const previous = detailSeatGeometry;
   detailSeatGeometry = seat.geometry;
-  for (const mesh of Object.values(detailMeshes)) mesh.geometry = detailSeatGeometry;
+  for (const mesh of Object.values(detailMeshes)) {
+    mesh.geometry = detailSeatGeometry;
+    seatLight?.attach(mesh);
+  }
   previous.dispose();
 }, undefined, (error) => console.error('Could not load the stadium seat model:', error));
 yellow.castShadow = true;
@@ -889,6 +901,10 @@ for (const [mesh, data] of [[yellow, yellowData], [blue, blueData], [green, gree
   data.forEach((seat, index) => {
     if (seat.hidden) mesh.setMatrixAt(index, hiddenMatrix);
   });
+}
+if (seatLight) {
+  for (const mesh of [yellow, blue, green, ...Object.values(detailMeshes), ...Object.values(detailMid)]) seatLight.attach(mesh);
+  for (const [mesh, data] of [[yellow, yellowData], [blue, blueData], [green, greenData]]) data.forEach((seat, index) => seatLight.set(mesh, index, seat));
 }
 // Цветной план секторов для общего вида: плоские плитки над местами (одна на кресло), цвет по номеру сектора.
 // Видна только на первом шаге выбора; номер и трибуна показываются при наведении, в списке секторов и на табличках.
@@ -1495,6 +1511,7 @@ function applyDetail(mode, origin) {
     if (mode === 'near' && seat.position.distanceToSquared(origin) >= nearSquared) {
       // Среднее расстояние: упрощённая модель кресла.
       if (midCounts[seat.group] >= detailCapacity) continue;
+      seatLight?.set(detailMid[seat.group], midCounts[seat.group], seat);
       detailMid[seat.group].setMatrixAt(midCounts[seat.group]++, seat.matrix);
       detailLegs.setMatrixAt(legs++, seat.matrix);
       placed.add(seat);
@@ -1502,6 +1519,7 @@ function applyDetail(mode, origin) {
     }
     if (counts[seat.group] >= detailCapacity) continue;
     seat.detailIndex = counts[seat.group];
+    seatLight?.set(detailMeshes[seat.group], counts[seat.group], seat);
     detailMeshes[seat.group].setMatrixAt(counts[seat.group]++, seat.matrix);
     detailLegs.setMatrixAt(legs++, seat.matrix);
     sectorHits.setMatrixAt(sectorRefs.length, seat.matrix);
@@ -2026,7 +2044,7 @@ if (!initialHash && !matchMedia('(prefers-reduced-motion: reduce)').matches && !
 // Затенение в контактах (ambient occlusion): тёмные стыки между рядами, креслами и ступенями.
 // Включается только на десктопе; ?fx=0 в адресе отключает эффект.
 if (location.search.includes('debug')) {
-  window.__debug = { getRefine: () => refine, renderer, scene, camera, seats, getComposer: () => composer, getAoCamera: () => aoCamera };
+  window.__debug = { seatLight, getRefine: () => refine, renderer, scene, camera, seats, getComposer: () => composer, getAoCamera: () => aoCamera };
   // Экспорт сцены в GLB для рендера панорам в Blender (работает только с dev-сервером).
   // Список мест (трибуна, сектор, ряд, номер, положение камеры) для планирования сетки панорам.
   window.__debug.exportSeats = async () => {
