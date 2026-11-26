@@ -63,7 +63,7 @@ def light_sample(origin):
         for mast in masts:
             delta = mast - origin
             distance = delta.length
-            values.append(visible(origin, delta.normalized(), distance - 0.01) / (distance * distance))
+            values.append(visible(origin, delta.normalized(), max(0, distance - 3.0)) / (distance * distance))
         direct = min(1, sum(values) * 1500)
     else:
         direct = float(visible(origin, sun, 500))
