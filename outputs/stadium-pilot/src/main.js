@@ -1030,7 +1030,7 @@ planLayer = usePlanImage ? createPlanLayer({
     // На сенсорном экране первое касание подсвечивает сектор и показывает подпись, второе открывает его.
     if (event.pointerType === 'touch' && hoveredSector !== sector) {
       planHover(sector);
-      seatTip.textContent = `${standNames[info.stand]} · сектор ${sector} · ${info.seatCount} мест`;
+      seatTip.textContent = `Сектор ${sector} · ${info.seatCount} мест · нажмите ещё раз`;
       placeTip(event.clientX - 70, event.clientY - 54);
       return;
     }
@@ -1921,10 +1921,8 @@ canvas.addEventListener('pointerup', (event) => {
     // На сенсорном экране первое касание подсвечивает сектор и показывает подпись, второе открывает его.
     if (event.pointerType === 'touch' && bookingOpen && hoveredSector !== seat.sector) {
       planHover(seat.sector);
-      seatTip.textContent = `${standNames[seat.stand]} · сектор ${seat.sector} · ${(sectorSeatIndices.get(seat.sector) || []).length} мест`;
-      seatTip.style.left = `${Math.min(window.innerWidth - 150, Math.max(10, event.clientX - 70))}px`;
-      seatTip.style.top = `${Math.max(70, event.clientY - 54)}px`;
-      seatTip.hidden = false;
+      seatTip.textContent = `Сектор ${seat.sector} · ${(sectorSeatIndices.get(seat.sector) || []).length} мест · нажмите ещё раз`;
+      placeTip(event.clientX - 70, event.clientY - 54);
       return;
     }
     seatTip.hidden = true;
@@ -1989,7 +1987,7 @@ canvas.addEventListener('pointermove', (event) => {
   seatTip.hidden = false;
   canvas.style.cursor = 'pointer';
 });
-canvas.addEventListener('pointerleave', () => { seatTip.hidden = true; });
+canvas.addEventListener('pointerleave', (event) => { if (event.pointerType !== 'touch') seatTip.hidden = true; });
 canvas.addEventListener('pointercancel', () => { dragging = false; });
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;

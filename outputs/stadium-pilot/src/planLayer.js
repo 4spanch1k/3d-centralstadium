@@ -152,7 +152,9 @@ export function createPlanLayer({ asset, getArea, onHover, onPick }) {
     root.style.cursor = sector ? 'pointer' : '';
     onHover(sector, event, data?.sectors.get(sector) || null);
   });
-  root.addEventListener('pointerleave', () => onHover(null, null, null));
+  // У касания pointerleave приходит сразу после отпускания пальца: подсветку первого касания он не должен снимать,
+  // иначе второе касание снова считается первым и сектор не открывается.
+  root.addEventListener('pointerleave', (event) => { if (event.pointerType !== 'touch') onHover(null, null, null); });
   root.addEventListener('pointerup', (event) => {
     const sector = sectorAt(event.clientX, event.clientY);
     if (sector) onPick(sector, event, data.sectors.get(sector));
