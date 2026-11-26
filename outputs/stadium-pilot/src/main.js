@@ -81,7 +81,12 @@ const midTier = tier === 'mid';
 const qualityMax = tier === 'max';
 // Замер на Mac (Retina): обычный кадр 3–5 мс даже в 2×, а проход затенения GTAO добавляет 8–17 мс (он заново рисует всю сцену ради нормалей),
 // поэтому по умолчанию GTAO выключен, а сэкономленное идёт на чёткость (разрешение до 2×). Затенение даёт запечённая карта.
-let pixelRatio = Math.min(window.devicePixelRatio, lowPower ? 1.25 : midTier ? 1.75 : 2);
+// На телефонах кадры в замерах почти не зависели от разрешения (0,9× и 1,7× давали около 40–45 в секунду),
+// поэтому и в движении рисуем крупно. ?res=3 задаёт разрешение движения вручную для сравнения.
+const forcedRatio = Math.min(Number(new URLSearchParams(location.search).get('res')) || 0, 3);
+let pixelRatio = Math.min(window.devicePixelRatio, forcedRatio >= 0.75 ? forcedRatio : lowPower ? 1.25 : midTier ? (touchDevice ? 2.5 : 1.75) : 2);
+// Постобработка (вечернее свечение) на телефонах считается в меньшем разрешении: иначе не хватит видеопамяти.
+const composerRatio = (value) => (touchDevice ? Math.min(value, 1.75) : value);
 renderer.setPixelRatio(pixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -2186,7 +2191,7 @@ if (!lowPower && new URLSearchParams(location.search).get('fx') !== '0') {
     bloomPass.enabled = eveningMode;
     instance.addPass(bloomPass);
     instance.addPass(new OutputPass());
-    instance.setPixelRatio(pixelRatio);
+    instance.setPixelRatio(composerRatio(pixelRatio));
     instance.setSize(window.innerWidth, window.innerHeight);
     composer = instance;
   }).catch((error) => console.warn('Затенение недоступно:', error));
@@ -2195,7 +2200,7 @@ if (!lowPower && new URLSearchParams(location.search).get('fx') !== '0') {
 // Рендер по требованию: пока ничего не меняется, сцена не перерисовывается (экономит батарею и нагрев).
 const maxPixelRatio = pixelRatio;
 // Нижняя граница чёткости: на экранах телефонов (2–3 точки на пиксель) ниже неё картинка превращается в «мыло».
-const minPixelRatio = qualityMax ? maxPixelRatio : Math.min(maxPixelRatio, lowPower ? 1 : midTier ? 1.35 : 1.0);
+const minPixelRatio = qualityMax || forcedRatio >= 0.75 ? maxPixelRatio : Math.min(maxPixelRatio, lowPower ? 1 : midTier ? (touchDevice ? 2 : 1.35) : 1.0);
 let pixelCeiling = maxPixelRatio;
 let lastViewCap = maxPixelRatio;
 let lastActivity = performance.now() + 8000;
@@ -2255,7 +2260,7 @@ function applyPixelRatio(value) {
   restSharp = false;
   renderer.setPixelRatio(value);
   renderer.setSize(window.innerWidth, window.innerHeight);
-  composer?.setPixelRatio(value);
+  composer?.setPixelRatio(composerRatio(value));
   composer?.setSize(window.innerWidth, window.innerHeight);
 }
 // Счётчик кадров для проверки на разных компьютерах: добавьте ?fps=1 к адресу. Показывает частоту, время кадра (среднее и 95%), разрешение и нагрузку.
