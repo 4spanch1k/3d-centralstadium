@@ -2266,6 +2266,17 @@ function refineStep() {
   if (refine.index >= refine.n) refine.done = true;
 }
 refine.step = refineStep;
+// Телефон может отнять у вкладки видеопамять (потеря WebGL-контекста). Three.js восстанавливает ресурсы сам,
+// но цикл рисует только по изменениям, а содержимое теней и накопителя пропало: без этого оставался пустой фон.
+renderer.domElement.addEventListener('webglcontextrestored', () => {
+  refine.cur?.dispose();
+  refine.acc?.dispose();
+  refine.cur = null;
+  refine.acc = null;
+  refineReset();
+  renderer.shadowMap.needsUpdate = true;
+  markDirty();
+});
 renderer.setAnimationLoop(() => {
   const now = performance.now();
   const active = Boolean(cameraTransition) || now - lastActivity < 1800;
