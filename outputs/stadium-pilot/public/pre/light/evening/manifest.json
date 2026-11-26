@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "status": "experimental-do-not-enable",
+  "dimensions": [
+    800,
+    34
+  ],
+  "index": "x=pathIndex; y=rowIndex from image top",
+  "encoding": "RGBA8 raw linear data; R=G=B heuristic direct floodlight visibility, A=valid",
+  "coverage": {
+    "seats": 24323,
+    "sectors": 57
+  },
+  "missing": "A=0 means no sample: multiplier 1",
+  "files": {
+    "seat-evening.png": {
+      "bytes": 8881,
+      "sha256": "f13e6b922a3221bc0b8efc8cf2c2ba9d7f126fa4dc583fbab1441e21d197dc4e"
+    },
+    "concrete-evening.png": {
+      "bytes": 11619,
+      "sha256": "c25d2b3f69bc3e1da7e61d11c78b4391098eb476563715a8486508de0c4b9cba"
+    }
+  },
+  "caveats": [
+    "ray visibility approximation, not Cycles bake",
+    "last 3 m before mast excluded; may miss actual occluders",
+    "not calibrated to scene light intensity",
+    "many zero concrete values and saturated seats require review"
+  ]
+}
