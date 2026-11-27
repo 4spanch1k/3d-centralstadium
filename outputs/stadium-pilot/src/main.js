@@ -278,6 +278,9 @@ uniform vec4 uAoRect;
 uniform float uAoStrength;
 // Карты вида сверху сняты до удлинения торцов (см. END_SHIFT): на трибунах и за ними x возвращается в прежние координаты.
 vec2 bakedUv(vec3 place) {
+  // За западным краем стояла колоннада (тени от неё остались в картах), а за краем карты размазывается крайний ряд пикселей:
+  // там берём чистый угол.
+  if (place.z < -96.0 || place.z > 104.5 || abs(place.x) > 137.0) return vec2(0.002);
   float x = place.x;
   float far = abs(x);
   if (abs(place.z) > 52.0) x = sign(x) * (far < 82.73 ? far * 0.8461 : far - 12.73);
@@ -2685,14 +2688,35 @@ for (const [id, move] of [['#seat-prev', [0, -1]], ['#seat-next', [0, 1]]]) {
   document.querySelector(id)?.addEventListener('click', () => goToNeighbor(...move));
 }
 
-// Главный фасад: собственная модель по фотографии-ориентиру (work/blender/create_west_facade.py), стоит снаружи западной трибуны.
-modelLoader.load(asset('west-facade.glb'), (model) => {
+// Главный фасад с колоннадой: собственная модель (work/blender/create_west_facade.py), за северной трибуной, лицом на север.
+// Файл построен лицом на запад у точки z = -103: поворачиваем и ставим вплотную к внешнему краю чаши.
+modelLoader.load(asset('west-facade.glb?v=3'), (model) => {
   model.scene.traverse((object) => {
     if (object.isMesh) {
       object.castShadow = true;
       object.receiveShadow = true;
     }
   });
+  // Название над балюстрадой (изнутри видна обратная сторона букв).
+  const nameCanvas = document.createElement('canvas');
+  nameCanvas.width = 2048;
+  nameCanvas.height = 192;
+  const nameContext = nameCanvas.getContext('2d');
+  nameContext.fillStyle = '#b1232a';
+  nameContext.font = '800 170px system-ui, sans-serif';
+  nameContext.textAlign = 'center';
+  nameContext.textBaseline = 'middle';
+  nameContext.fillText('ОРТАЛЫҚ СТАДИОН', 1024, 104, 2000);
+  const nameTexture = new THREE.CanvasTexture(nameCanvas);
+  nameTexture.colorSpace = THREE.SRGBColorSpace;
+  nameTexture.anisotropy = 8;
+  const name = new THREE.Mesh(new THREE.PlaneGeometry(21, 1.97), new THREE.MeshStandardMaterial({ map: nameTexture, alphaTest: 0.35, side: THREE.DoubleSide, roughness: 0.6 }));
+  name.position.set(0, 14.15, -103.4); // над балюстрадой (её верх на 13,1 м)
+  name.rotation.y = Math.PI;
+  model.scene.add(name);
+  model.scene.rotation.y = -Math.PI / 2;
+  // Внутренний край модели (6 м от её оси в сторону поля) встаёт в полуметре за последним рядом севера.
+  model.scene.position.x = warpX((71.6 + 33 * 0.72 + 2) * bowlScaleX) + 0.5 - (103 - 6);
   scene.add(model.scene);
   renderer.shadowMap.needsUpdate = true;
   markDirty();
