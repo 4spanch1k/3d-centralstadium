@@ -1,7 +1,8 @@
 """Create four approximate 40 m floodlight masts east of the stadium.
 
-Coordinates are in metres: Blender Y=-94 becomes Three.js Z=+94. The four
-locations and lamp layout are illustrative, not surveyed positions.
+Coordinates are in metres: Blender Y=-z becomes Three.js Z. Positions along the
+pitch follow the OpenStreetMap mast nodes; distance from the axis is kept just
+behind the modelled east stand. Lamp layout is illustrative, not surveyed.
 Run: Blender -b -P work/blender/create_floodlight_masts.py
 """
 from pathlib import Path
@@ -15,7 +16,7 @@ bpy.ops.wm.read_factory_settings(use_empty=True)
 meshes = {}
 materials = {}
 for name, color, metallic, roughness in (
-    ('Mast steel', (0.38, 0.42, 0.42, 1), 0.7, 0.5),
+    ('Mast steel', (0.09, 0.30, 0.27, 1), 0.55, 0.5),
     ('Lamp housing', (0.08, 0.10, 0.11, 1), 0.4, 0.6),
     ('Lamp face', (0.9, 0.88, 0.8, 1), 0.05, 0.3),
 ):
@@ -42,8 +43,9 @@ def beam(name, start, end, width, depth):
     bmesh.ops.transform(meshes[name], matrix=transform, verts=vertices)
 
 
-for x in (-84, -28, 28, 84):
-    y = -94
+# Совпадает с mastPlaces в outputs/stadium-pilot/src/main.js.
+for x, distance in ((-62, 91), (-36, 94), (40, 94), (64, 91)):
+    y = -distance
     for dx in (-1, 1):
         for dy in (-1, 1):
             beam('Mast steel', (x + dx * 1.25, y + dy * 1.25, 0),

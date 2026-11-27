@@ -1329,11 +1329,26 @@ modelLoader.load(asset('west-building.glb'), (model) => {
   renderer.shadowMap.needsUpdate = true;
 }, undefined, (error) => console.error('Не удалось загрузить здание трибуны:', error));
 let roofModel;
-modelLoader.load(asset('stadium-roof.glb'), (model) => {
+// Панели крыши полупрозрачные: днём чуть светятся проходящим светом, вечером нет.
+let roofPanelMaterial;
+const roofGlow = () => (eveningMode ? 0.04 : 0.32);
+modelLoader.load(asset('stadium-roof.glb?v=3'), (model) => {
   model.scene.traverse((object) => {
     if (object.isMesh) {
       object.castShadow = true;
       object.receiveShadow = true;
+      if (object.material.name === 'Roof panels') {
+        roofPanelMaterial = object.material;
+        Object.assign(roofPanelMaterial, { transparent: true, opacity: 0.74, depthWrite: false, side: THREE.DoubleSide });
+        roofPanelMaterial.emissive.set('#1f8f98');
+        roofPanelMaterial.emissiveIntensity = roofGlow();
+        // Свечение только снизу: сверху панели остаются тёмно-бирюзовыми.
+        roofPanelMaterial.onBeforeCompile = (shader) => {
+          shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+totalEmissiveRadiance *= inverseTransformDirection(normal, viewMatrix).y < 0.0 ? 1.0 : 0.08;`);
+        };
+        roofPanelMaterial.customProgramCacheKey = () => 'roof-panels';
+      }
     }
   });
   roofModel = model.scene;
@@ -1402,16 +1417,16 @@ scoreScreen.position.set(scoreboardX + 0.64, 13.8, 0);
 scene.add(scoreScreen);
 // Четыре мачты освещения по 40 м на восточном краю (модель из work/blender/create_floodlight_masts.py).
 // Светящиеся панели ламп (вечером ярче) повторяют положение ламп модели.
-const mastXs = [-84, -28, 28, 84];
-const mastZ = 94;
-modelLoader.load(asset('floodlight-masts.glb'), (model) => {
+// [вдоль поля, от оси к востоку]: вдоль поля по узлам OpenStreetMap, от оси — сразу за восточной трибуной модели.
+const mastPlaces = [[-62, 91], [-36, 94], [40, 94], [64, 91]];
+modelLoader.load(asset('floodlight-masts.glb?v=2'), (model) => {
   model.scene.traverse((object) => { if (object.isMesh) object.castShadow = true; });
   scene.add(model.scene);
   renderer.shadowMap.needsUpdate = true;
 }, undefined, (error) => console.error('Не удалось загрузить мачты:', error));
-const floodlights = new THREE.InstancedMesh(new THREE.BoxGeometry(0.5, 0.62, 0.05), new THREE.MeshStandardMaterial({ color: '#ecede4', emissive: '#fff3d0', emissiveIntensity: 0.6 }), mastXs.length * 24);
+const floodlights = new THREE.InstancedMesh(new THREE.BoxGeometry(0.5, 0.62, 0.05), new THREE.MeshStandardMaterial({ color: '#ecede4', emissive: '#fff3d0', emissiveIntensity: 0.6 }), mastPlaces.length * 24);
 let lightIndex = 0;
-for (const x of mastXs) {
+for (const [x, mastZ] of mastPlaces) {
   for (let column = 0; column < 8; column += 1) {
     for (let row = 0; row < 3; row += 1) {
       helper.position.set(x - 2.8 + column * 0.8, 37.3 + row, mastZ - 0.2);
@@ -2581,15 +2596,13 @@ renderer.setAnimationLoop(() => {
   };
   // Прожекторы: четыре мачты по углам освещают поле и трибуны тёплым белым светом (только вечером, без теней).
   const fieldLights = [];
-  for (const x of mastXs) {
-    for (const z of [mastZ]) {
-      const spot = new THREE.SpotLight('#fff1d6', 34000, 0, 0.62, 0.7, 2);
-      spot.position.set(x, 38.5, z);
-      spot.target.position.set(0, 0, 0);
-      spot.visible = false;
-      scene.add(spot, spot.target);
-      fieldLights.push(spot);
-    }
+  for (const [x, z] of mastPlaces) {
+    const spot = new THREE.SpotLight('#fff1d6', 34000, 0, 0.62, 0.7, 2);
+    spot.position.set(x, 38.5, z);
+    spot.target.position.set(0, 0, 0);
+    spot.visible = false;
+    scene.add(spot, spot.target);
+    fieldLights.push(spot);
   }
   const toggle = document.createElement('button');
   toggle.type = 'button';
@@ -2640,6 +2653,7 @@ renderer.setAnimationLoop(() => {
     scene.backgroundIntensity = preset.backdrop;
     floodlights.material.emissiveIntensity = preset.lamps;
     eveningMode = mode === 'evening';
+    if (roofPanelMaterial) roofPanelMaterial.emissiveIntensity = roofGlow();
     for (const spot of fieldLights) spot.visible = eveningMode;
     if (eveningMode) loadEveningLight();
     aoUniforms.uLightAmount.value = eveningMode ? 0.9 : 0;

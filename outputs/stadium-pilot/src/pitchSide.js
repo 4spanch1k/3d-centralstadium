@@ -185,17 +185,19 @@ function dugoutSign(title, accent, anisotropy) {
   return canvasTexture(canvas, anisotropy);
 }
 
-// Скамейки запасных: изогнутый навес из дымчатого поликарбоната на дугах, отдельные кресла, табличка сзади.
-// Сторона +z смотрит на поле, трибуна видит их сзади.
+// Скамейки запасных по снимкам 2025 года: передвижные синие «ракушки» на колёсах с чёрными спортивными креслами,
+// стоят на дорожке. Сторона +z смотрит на поле, трибуна видит их сзади. Рекламы на настоящих мы не повторяем.
 export function createDugouts({ scene, anisotropy }) {
   const z = -38.4;
   const parts = createParts();
   const shells = [];
-  const glass = new THREE.MeshStandardMaterial({ color: '#7fa3b0', transparent: true, opacity: 0.34, roughness: 0.08, metalness: 0.35, side: THREE.DoubleSide, depthWrite: false });
-  const profile = new THREE.CatmullRomCurve3([[-0.88, 0.62], [-0.93, 1.25], [-0.72, 1.82], [-0.22, 2.14], [0.35, 2.22], [0.82, 2.12]].map(([dz, y]) => new THREE.Vector3(0, y, dz)));
-  const points = profile.getPoints(24);
-  const half = 3.5;
-  const canopy = new THREE.BufferGeometry();
+  const shellMaterial = new THREE.MeshStandardMaterial({ color: '#17489c', roughness: 0.32, metalness: 0.15, side: THREE.DoubleSide });
+  // Профиль оболочки в плоскости (глубина, высота): от пола сзади до козырька над креслами.
+  const profile = new THREE.CatmullRomCurve3([[-0.82, 0.2], [-1.02, 0.75], [-1.05, 1.35], [-0.86, 1.85], [-0.42, 2.14], [0.18, 2.2], [0.72, 2.04]]
+    .map(([dz, y]) => new THREE.Vector3(0, y, dz)));
+  const points = profile.getPoints(28);
+  const half = 3.2;
+  const back = new THREE.BufferGeometry();
   const positions = [];
   const indices = [];
   points.forEach((point, index) => {
@@ -205,48 +207,57 @@ export function createDugouts({ scene, anisotropy }) {
       indices.push(base, base + 1, base + 3, base, base + 3, base + 2);
     }
   });
-  canopy.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  canopy.setIndex(indices);
-  canopy.computeVertexNormals();
+  back.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  back.setIndex(indices);
+  back.computeVertexNormals();
   const side = new THREE.Shape();
-  side.moveTo(-0.88, 0.08);
+  side.moveTo(-0.82, 0.2);
   for (const point of points) side.lineTo(point.z, point.y);
-  side.lineTo(0.15, 0.08);
-  const sideGeometry = new THREE.ShapeGeometry(side);
+  side.quadraticCurveTo(0.95, 1.7, 0.62, 1.25);
+  side.quadraticCurveTo(0.3, 0.75, 0.55, 0.2);
+  const sideGeometry = new THREE.ShapeGeometry(side, 8);
   sideGeometry.rotateY(-Math.PI / 2); // ось x контура становится осью z
-  sideGeometry.deleteAttribute('uv'); // чтобы склеить с навесом в один меш
+  sideGeometry.deleteAttribute('uv'); // чтобы склеить с задней стенкой в один меш
 
-  const backShape = new THREE.Shape();
-  backShape.moveTo(-0.2, 0);
-  backShape.lineTo(0.2, 0);
-  backShape.lineTo(0.22, 0.36);
-  backShape.quadraticCurveTo(0.2, 0.55, 0, 0.56);
-  backShape.quadraticCurveTo(-0.2, 0.55, -0.22, 0.36);
-  const seatBackGeometry = new THREE.ExtrudeGeometry(backShape, { depth: 0.045, bevelEnabled: true, bevelSegments: 1, bevelSize: 0.018, bevelThickness: 0.018, curveSegments: 4 });
+  const seatBack = new THREE.Shape();
+  seatBack.moveTo(-0.2, 0);
+  seatBack.lineTo(0.2, 0);
+  seatBack.lineTo(0.27, 0.34);
+  seatBack.lineTo(0.17, 0.5);
+  seatBack.quadraticCurveTo(0.16, 0.74, 0, 0.75);
+  seatBack.quadraticCurveTo(-0.16, 0.74, -0.17, 0.5);
+  seatBack.lineTo(-0.27, 0.34);
+  const seatBackGeometry = new THREE.ExtrudeGeometry(seatBack, { depth: 0.07, bevelEnabled: true, bevelSegments: 1, bevelSize: 0.02, bevelThickness: 0.02, curveSegments: 4 });
 
-  for (const [x, title, accent, seatColor] of [[-10, 'ХОЗЯЕВА', '#e0a617', '#a8231d'], [10, 'ГОСТИ', '#5fb3e8', '#1d4f8f']]) {
-    shells.push(canopy.clone().translate(x, 0, z));
-    for (const dx of [-half, half]) shells.push(sideGeometry.clone().translate(x + dx, 0, z));
-    // Каркас: дуги, продольные трубы и стойки.
-    for (let i = 0; i <= 4; i += 1) {
-      const dx = -half + i * half / 2;
-      parts.add(new THREE.TubeGeometry(profile, 20, 0.032, 6), '#c9d0d3', x + dx, 0, z);
-      parts.rod([x + dx, 0.05, z - 0.88], [x + dx, 0.64, z - 0.88], 0.032, '#c9d0d3');
+  for (const [x, title, accent] of [[-10, 'ХОЗЯЕВА', '#e0a617'], [10, 'ГОСТИ', '#5fb3e8']]) {
+    shells.push(back.clone().translate(x, 0, z));
+    for (const dx of [-half, half]) {
+      shells.push(sideGeometry.clone().translate(x + dx, 0, z));
+      // Светлый кант по краю боковины.
+      parts.add(new THREE.TubeGeometry(profile, 24, 0.04, 6), '#cfd6da', x + dx, 0, z);
+      parts.rod([x + dx, 2.04, z + 0.72], [x + dx, 1.25, z + 0.62], 0.035, '#cfd6da');
+      parts.rod([x + dx, 1.25, z + 0.62], [x + dx, 0.2, z + 0.55], 0.035, '#cfd6da');
+      // Колёса передвижной рамы.
+      for (const dz of [-0.78, 0.5]) parts.cylinder(0.1, 0.1, 0.07, '#15181a', x + dx, 0.13, z + dz, 0, 0, Math.PI / 2, 12);
     }
-    parts.rod([x - half, 2.12, z + 0.82], [x + half, 2.12, z + 0.82], 0.045, '#c9d0d3');
-    parts.rod([x - half, 1.82, z - 0.72], [x + half, 1.82, z - 0.72], 0.025, '#c9d0d3');
-    parts.box(7.2, 0.08, 1.85, '#23292d', x, 0.07, z - 0.04);
-    for (let i = 0; i < 12; i += 1) {
-      const sx = x - 3.08 + i * 0.56;
-      parts.box(0.44, 0.08, 0.42, seatColor, sx, 0.52, z - 0.36);
-      parts.add(seatBackGeometry.clone(), seatColor, sx, 0.57, z - 0.58, -0.14);
-      parts.box(0.08, 0.38, 0.08, '#8b949a', sx, 0.3, z - 0.42);
+    parts.rod([x - half, 2.04, z + 0.72], [x + half, 2.04, z + 0.72], 0.04, '#cfd6da');
+    parts.box(6.4, 0.08, 0.08, '#8b949a', x, 0.2, z + 0.55);
+    parts.box(6.4, 0.08, 0.08, '#8b949a', x, 0.2, z - 0.8);
+    parts.box(6.36, 0.05, 1.34, '#23292d', x, 0.2, z - 0.13);
+    // Светлая панель внутри за креслами.
+    parts.box(6.2, 0.62, 0.03, '#e4e9ec', x, 1.5, z - 0.93);
+    for (let i = 0; i < 8; i += 1) {
+      const sx = x - 2.66 + i * 0.76;
+      parts.box(0.56, 0.13, 0.5, '#16191c', sx, 0.55, z - 0.36);
+      parts.add(seatBackGeometry.clone(), '#16191c', sx, 0.6, z - 0.62, -0.17);
+      parts.box(0.2, 0.46, 0.02, '#e0a617', sx, 0.93, z - 0.59, -0.17);
+      parts.box(0.1, 0.28, 0.1, '#8b949a', sx, 0.37, z - 0.4);
     }
-    const sign = new THREE.Mesh(facedBox(7, 0.56, 0.05, 5), [
+    const sign = new THREE.Mesh(facedBox(4.6, 0.4, 0.05, 5), [
       new THREE.MeshStandardMaterial({ color: '#16222c', roughness: 0.55 }),
       new THREE.MeshStandardMaterial({ map: dugoutSign(title, accent, anisotropy), roughness: 0.55 }),
     ]);
-    sign.position.set(x, 0.38, z - 0.9);
+    sign.position.set(x, 0.8, z - 1.09);
     sign.castShadow = true;
     scene.add(sign);
     // Ящики с водой и сумка врача рядом.
@@ -254,9 +265,10 @@ export function createDugouts({ scene, anisotropy }) {
     parts.box(0.66, 0.06, 0.46, '#e6ebee', x + 4.15, 0.52, z - 0.3);
     parts.box(0.5, 0.3, 0.3, '#b4302a', x - 4.05, 0.22, z - 0.5, 0, 0.3);
   }
-  const shell = new THREE.Mesh(mergeGeometries(shells), glass);
+  const shell = new THREE.Mesh(mergeGeometries(shells), shellMaterial);
   shell.castShadow = true;
-  scene.add(shell, parts.mesh(0.5, 0.2));
+  shell.receiveShadow = true;
+  scene.add(shell, parts.mesh(0.5, 0.15));
 }
 
 function grateTexture(anisotropy) {

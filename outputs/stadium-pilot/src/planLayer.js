@@ -3,7 +3,7 @@
 // Подсветка рисуется на 2D-слое по контурам из sectors.json: выбранный сектор яркий с золотой кромкой, остальные приглушены.
 // Версия готового плана: меняйте вместе с файлами pre/plan. Иначе кэш на устройстве отдаст старую картинку или маску
 // к новым номерам секторов, и нажатие откроет чужой сектор.
-const PLAN_VERSION = 5;
+const PLAN_VERSION = 6;
 
 export function createPlanLayer({ asset, getArea, onHover, onPick }) {
   const root = document.createElement('div');

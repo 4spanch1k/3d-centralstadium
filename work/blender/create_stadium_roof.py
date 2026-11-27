@@ -17,9 +17,12 @@ bpy.ops.wm.read_factory_settings(use_empty=True)
 meshes = {}
 materials = {}
 for name, color, metallic, roughness in (
-    ('Roof panels', (0.015, 0.055, 0.15, 1), 0.15, 0.48),
-    ('Roof framing', (0.12, 0.16, 0.19, 1), 0.55, 0.48),
-    ('Main trusses', (0.35, 0.39, 0.40, 1), 0.55, 0.5),
+    # Цвета по снимкам 25.09.2025: полупрозрачные бирюзовые панели, тёмные фермы, бирюзовые опоры, светлая кромка.
+    ('Roof panels', (0.01, 0.16, 0.21, 1), 0.1, 0.38),
+    ('Roof framing', (0.025, 0.05, 0.06, 1), 0.55, 0.5),
+    ('Main trusses', (0.05, 0.10, 0.11, 1), 0.55, 0.5),
+    ('Roof supports', (0.07, 0.28, 0.27, 1), 0.45, 0.5),
+    ('Roof edge', (0.55, 0.60, 0.60, 1), 0.5, 0.45),
 ):
     material = bpy.data.materials.new(name)
     material.use_nodes = True
@@ -66,7 +69,29 @@ for x in (-66, -44, -22, 0, 22, 44, 66):
     for y in range(56, 92, 4):
         beam('Main trusses', (x, y, height(y) - 1.6), (x, y + 4, height(y + 4) - 0.25), 0.09, 0.09)
         beam('Main trusses', (x, y, height(y) - 0.25), (x, y + 4, height(y + 4) - 1.6), 0.09, 0.09)
-    beam('Main trusses', (x, rear, 0), (x, rear, height(rear) - 0.2), 0.45, 0.45)
+    # Решётчатая опора: четыре стойки и раскосы.
+    top = height(rear) - 0.2
+    for dx in (-0.55, 0.55):
+        for dy in (-0.55, 0.55):
+            beam('Roof supports', (x + dx, rear + dy, 0), (x + dx, rear + dy, top), 0.16, 0.16)
+    z = 0.0
+    flip = 1
+    while z < top - 0.1:
+        upper = min(z + 2.2, top)
+        for side in (-0.55, 0.55):
+            beam('Roof supports', (x - 0.55 * flip, rear + side, z), (x + 0.55 * flip, rear + side, upper), 0.07, 0.07)
+            beam('Roof supports', (x + side, rear - 0.55 * flip, z), (x + side, rear + 0.55 * flip, upper), 0.07, 0.07)
+        z = upper
+        flip = -flip
+
+# Светлая решётчатая балка по передней кромке (прожекторы на ней добавляет приложение).
+for dz in (0.15, -0.75):
+    beam('Roof edge', (-half_length, front - 0.1, height(front) + dz), (half_length, front - 0.1, height(front) + dz), 0.16, 0.16)
+step = 1.5
+for index in range(int(2 * half_length / step)):
+    x = -half_length + index * step
+    low, high = (-0.75, 0.15) if index % 2 else (0.15, -0.75)
+    beam('Roof edge', (x, front - 0.1, height(front) + low), (x + step, front - 0.1, height(front) + high), 0.06, 0.06)
 
 for name, bm in meshes.items():
     mesh = bpy.data.meshes.new(name)

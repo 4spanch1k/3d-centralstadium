@@ -25,7 +25,7 @@ for obj in scene.objects:
         obj.data.materials.clear()
         obj.data.materials.append(tree_material)
 for obj in scene.objects:
-    if obj.name.split('.')[0] in {'Roof_framing', 'Roof_panels'}:
+    if obj.name.split('.')[0] in {'Roof_framing', 'Roof_panels', 'Roof_edge'}:
         obj.hide_render = True
 world = bpy.data.worlds.new('Sky')
 world.use_nodes = True
