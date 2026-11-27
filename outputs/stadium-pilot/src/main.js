@@ -344,12 +344,13 @@ const seatMaterial = (color) => (qualityMax
 const yellowSeats = seatMaterial('#e0a617');
 const blueSeats = seatMaterial('#1f5fa8');
 const greenSeats = seatMaterial('#2f8f6a');
+const skySeats = seatMaterial('#a6c8ee'); // выцветший голубой верх восточной трибуны
 // Кресла тоже получают запечённое затенение по месту установки (слабее, чтобы не считать тень кресла дважды).
-for (const seatMaterial of [yellowSeats, blueSeats, greenSeats]) weather(seatMaterial, { stains: false, ao: 0.35 });
+for (const seatMaterial of [yellowSeats, blueSeats, greenSeats, skySeats]) weather(seatMaterial, { stains: false, ao: 0.35 });
 // Читаемые дальние трибуны (разный тон, ряды, дымка); ?stands=old или ?look=old показывает как было.
 const newStands = newLook && new URLSearchParams(location.search).get('stands') !== 'old';
 if (newStands) {
-  for (const surface of [yellowSeats, blueSeats, greenSeats]) patchStandSeat(surface);
+  for (const surface of [yellowSeats, blueSeats, greenSeats, skySeats]) patchStandSeat(surface);
   for (const surface of [concrete, darkConcrete]) patchStandConcrete(surface);
 }
 // Эксперимент: запечённое затенение кресел и ступеней из Blender, только по ?light=1 (сила: &lightStrength=0..1).
@@ -359,7 +360,7 @@ const seatLight = lightParams.get('light') === '1' ? createSeatLight({
   strength: THREE.MathUtils.clamp(Number(lightParams.get('lightStrength') ?? 0.6) || 0, 0, 1),
   onReady: () => markDirty(),
 }) : null;
-if (seatLight) for (const surface of [yellowSeats, blueSeats, greenSeats]) seatLight.patch(surface);
+if (seatLight) for (const surface of [yellowSeats, blueSeats, greenSeats, skySeats]) seatLight.patch(surface);
 const steel = qualityMax ? new THREE.MeshStandardMaterial({ color: '#d8dbd2', roughness: 0.38, metalness: 0.7 }) : material('#d8dbd2', 0.55);
 
 const buildingRoofs = [];
@@ -810,6 +811,7 @@ const lowSeatGeometry = mergeGeometries([lowBase, lowBack, lowLeg]);
 const yellow = new THREE.InstancedMesh(lowSeatGeometry, yellowSeats, rows * seatsPerRow);
 const blue = new THREE.InstancedMesh(lowSeatGeometry, blueSeats, rows * seatsPerRow);
 const green = new THREE.InstancedMesh(lowSeatGeometry, greenSeats, rows * seatsPerRow);
+const sky = new THREE.InstancedMesh(lowSeatGeometry, skySeats, rows * seatsPerRow);
 const modelLoader = new GLTFLoader();
 // Горы подгружаются после первого кадра: стадион появляется быстрее, особенно на телефоне.
 loadQueue.add('рельеф гор', 30, () => modelLoader.loadAsync(asset('alatau-terrain.glb')).then((model) => {
@@ -837,6 +839,7 @@ modelLoader.load(asset('stadium-seat.glb'), (model) => {
 yellow.castShadow = true;
 blue.castShadow = true;
 green.castShadow = true;
+sky.castShadow = true;
 const hitGeometry = new THREE.BoxGeometry(0.7, 0.75, 0.85);
 hitGeometry.translate(0, 0.22, 0);
 const seatHits = new THREE.InstancedMesh(hitGeometry, new THREE.MeshBasicMaterial(), rows * seatsPerRow);
@@ -851,6 +854,7 @@ const detailMeshes = {
   yellow: new THREE.InstancedMesh(seatGeometry, yellowSeats, detailCapacity),
   blue: new THREE.InstancedMesh(seatGeometry, blueSeats, detailCapacity),
   green: new THREE.InstancedMesh(seatGeometry, greenSeats, detailCapacity),
+  sky: new THREE.InstancedMesh(seatGeometry, skySeats, detailCapacity),
 };
 // Три уровня кресла: рядом (до 20 м) подробная модель из stadium-seat.glb, дальше упрощённая (около 200 треугольников), ещё дальше простые кубики.
 const nearDetailRadius = lowPower ? 14 : midTier ? 17 : qualityMax ? 30 : 20;
@@ -858,6 +862,7 @@ const detailMid = {
   yellow: new THREE.InstancedMesh(seatGeometry, yellowSeats, detailCapacity),
   blue: new THREE.InstancedMesh(seatGeometry, blueSeats, detailCapacity),
   green: new THREE.InstancedMesh(seatGeometry, greenSeats, detailCapacity),
+  sky: new THREE.InstancedMesh(seatGeometry, skySeats, detailCapacity),
 };
 const detailLegs = new THREE.InstancedMesh(supportGeometry, material('#59645e', 0.75), detailCapacity * 3);
 const sectorHits = new THREE.InstancedMesh(hitGeometry, new THREE.MeshBasicMaterial(), detailCapacity * 3);
@@ -872,10 +877,34 @@ const helper = new THREE.Object3D();
 const yellowData = [];
 const blueData = [];
 const greenData = [];
+const skyData = [];
 const seats = [];
 let yellowCount = 0;
 let blueCount = 0;
 let greenCount = 0;
+let skyCount = 0;
+// Цвета кресел по снимкам 25.09.2025 (границы блоков на глаз). Мягкие кресла VIP и ложа прессы не выделены.
+// Юг: десять клиньев, с востока на запад з-ж-з-ж-з | проход под табло | з-ж-з-ж-з.
+// Север (z: запад отрицательный): жёлтый центр над колоннадой, зелёное у башен и по бокам, узкий жёлтый на западе и крупный на востоке.
+// Запад: низ жёлтый, верх тёмно-синий, у ложи вставки (сверху жёлто-оранжевые, ниже зелёные). Восток: низ зелёный, верх голубой.
+function seatColor(stand, row, i, position, southFrom, southTo) {
+  if (stand === 'south') {
+    const block = Math.min(9, Math.floor((i - southFrom) / (southTo - southFrom + 1) * 10));
+    return ['green', 'yellow', 'green', 'yellow', 'green', 'green', 'yellow', 'green', 'yellow', 'green'][block];
+  }
+  if (stand === 'north') {
+    const z = position.z;
+    const aside = Math.abs(z);
+    if (aside < 13) return 'yellow';
+    if (z < 0) return aside >= 22 && aside < 27 ? 'yellow' : 'green';
+    return aside < 36 ? 'green' : 'yellow';
+  }
+  if (stand === 'east') return row < 13 ? 'green' : 'sky';
+  if (row < 15) return 'yellow';
+  const besideBox = Math.abs(position.x) < 33;
+  if (!besideBox) return 'blue';
+  return row >= 25 ? 'yellow' : 'green';
+}
 for (let row = 0; row < rows; row += 1) {
   const step = row * 0.72 + (row >= 15 ? 2 : 0);
   const y = 0.45 + row * 0.37;
@@ -898,6 +927,10 @@ for (let row = 0; row < rows; row += 1) {
     aisleSteps.setMatrixAt(row * aisles.length + aisle, helper.matrix);
   }
   helper.scale.set(1, 1, 1);
+  // Участок обхода ряда, занятый южной трибуной: по нему делятся клинья.
+  const onSouth = (source) => source.x < 0 && -source.x / ((71 + step) * bowlScaleX) > Math.abs(source.y) / ((53 + step) * bowlScaleZ);
+  const southFrom = sourcePoints.findIndex(onSouth);
+  const southTo = sourcePoints.findLastIndex(onSouth);
   for (let i = 0; i < seatsPerRow; i += 1) {
     if (i % 100 < 4) continue;
     const point = points[i];
@@ -915,19 +948,12 @@ for (let row = 0; row < rows; row += 1) {
     const seat = { stand, row: row + 1, rowIndex: row, pathIndex: i, position: helper.position.clone(), matrix: helper.matrix.clone() };
     seatHits.setMatrixAt(seats.length, helper.matrix);
     seats.push(seat);
-    if ((stand === 'east' && row < 13) || (stand === 'south' && Math.floor(i / 16) % 2 === 0)) {
-      green.setMatrixAt(greenCount++, helper.matrix);
-      seat.group = 'green';
-      greenData.push(seat);
-    } else if (((stand === 'east' || stand === 'west') && row >= 15) || (stand === 'north' && Math.floor(i / 16) % 3 === 0)) {
-      blue.setMatrixAt(blueCount++, helper.matrix);
-      seat.group = 'blue';
-      blueData.push(seat);
-    } else {
-      yellow.setMatrixAt(yellowCount++, helper.matrix);
-      seat.group = 'yellow';
-      yellowData.push(seat);
-    }
+    const color = seatColor(stand, row, i, helper.position, southFrom, southTo);
+    seat.group = color;
+    if (color === 'green') { green.setMatrixAt(greenCount++, helper.matrix); greenData.push(seat); }
+    else if (color === 'blue') { blue.setMatrixAt(blueCount++, helper.matrix); blueData.push(seat); }
+    else if (color === 'sky') { sky.setMatrixAt(skyCount++, helper.matrix); skyData.push(seat); }
+    else { yellow.setMatrixAt(yellowCount++, helper.matrix); yellowData.push(seat); }
   }
 }
 const standSectors = {
@@ -985,14 +1011,14 @@ for (const seat of seats) {
     else seat.row = row + 1;
   }
 }
-for (const [mesh, data] of [[yellow, yellowData], [blue, blueData], [green, greenData], [seatHits, seats]]) {
+for (const [mesh, data] of [[yellow, yellowData], [blue, blueData], [green, greenData], [sky, skyData], [seatHits, seats]]) {
   data.forEach((seat, index) => {
     if (seat.hidden) mesh.setMatrixAt(index, hiddenMatrix);
   });
 }
 if (seatLight) {
-  for (const mesh of [yellow, blue, green, ...Object.values(detailMeshes), ...Object.values(detailMid)]) seatLight.attach(mesh);
-  for (const [mesh, data] of [[yellow, yellowData], [blue, blueData], [green, greenData]]) data.forEach((seat, index) => seatLight.set(mesh, index, seat));
+  for (const mesh of [yellow, blue, green, sky, ...Object.values(detailMeshes), ...Object.values(detailMid)]) seatLight.attach(mesh);
+  for (const [mesh, data] of [[yellow, yellowData], [blue, blueData], [green, greenData], [sky, skyData]]) data.forEach((seat, index) => seatLight.set(mesh, index, seat));
 }
 const concreteContact = seatLight ? createConcreteContact({
   url: asset('pre/light/day/concrete-ao.png'),
@@ -1181,7 +1207,7 @@ if (planLayer) loadQueue.add('план секторов', 10, () => planLayer.pr
   let seed = 11;
   const random = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
   const shade = new THREE.Color();
-  for (const [mesh, total] of [[yellow, yellowCount], [blue, blueCount], [green, greenCount]]) {
+  for (const [mesh, total] of [[yellow, yellowCount], [blue, blueCount], [green, greenCount], [sky, skyCount]]) {
     for (let i = 0; i < total; i += 1) {
       const value = newStands ? 1 : 0.82 + random() * 0.18;
       mesh.setColorAt(i, shade.setRGB(value, value, value));
@@ -1192,16 +1218,18 @@ if (planLayer) loadQueue.add('план секторов', 10, () => planLayer.pr
 yellow.count = yellowCount;
 blue.count = blueCount;
 green.count = greenCount;
+sky.count = skyCount;
 yellow.instanceMatrix.needsUpdate = true;
 blue.instanceMatrix.needsUpdate = true;
 green.instanceMatrix.needsUpdate = true;
+sky.instanceMatrix.needsUpdate = true;
 seatHits.count = seats.length;
 seatHits.instanceMatrix.needsUpdate = true;
 aisleSteps.instanceMatrix.needsUpdate = true;
 aisleSteps.receiveShadow = true;
 // Меши из тысяч копий всегда видны целиком: отключаем отсечение по границам, чтобы кресла не исчезали при повороте.
-for (const instanced of [yellow, blue, green, seatHits, aisleSteps]) instanced.frustumCulled = false;
-scene.add(yellow, blue, green, seatHits, aisleSteps);
+for (const instanced of [yellow, blue, green, sky, seatHits, aisleSteps]) instanced.frustumCulled = false;
+scene.add(yellow, blue, green, sky, seatHits, aisleSteps);
 // Выходы на верхней кромке чаши в конце каждого прохода (положение и размеры ориентировочные).
 {
   const darkOpening = new THREE.MeshStandardMaterial({ color: '#0d1112', roughness: 1 });
@@ -1525,7 +1553,7 @@ const standNames = { west: 'Западная трибуна', east: 'Восто�
 function updateSeatHighlights() {
   const selected = new THREE.Color('#ffffff');
   const muted = new THREE.Color('#aaaaaa');
-  for (const [mesh, data] of [[yellow, yellowData], [blue, blueData], [green, greenData]]) {
+  for (const [mesh, data] of [[yellow, yellowData], [blue, blueData], [green, greenData], [sky, skyData]]) {
     data.forEach((seat, index) => {
       const active = !bookingOpen || view === 'seat' || view === 'overview' || seat.stand === standSelect.value;
       mesh.setColorAt(index, active ? selected : muted);
@@ -1604,8 +1632,8 @@ function applyDetail(mode, origin) {
   }
   // В детальные меши попадают только реально помещённые места; остальные остаются простыми, чтобы не было «дыр».
   const placed = new Set();
-  const counts = { yellow: 0, blue: 0, green: 0 };
-  const midCounts = { yellow: 0, blue: 0, green: 0 };
+  const counts = { yellow: 0, blue: 0, green: 0, sky: 0 };
+  const midCounts = { yellow: 0, blue: 0, green: 0, sky: 0 };
   const nearSquared = nearDetailRadius * nearDetailRadius;
   let legs = 0;
   sectorRefs.length = 0;
@@ -1629,7 +1657,7 @@ function applyDetail(mode, origin) {
     placed.add(seat);
   }
   const mainVisible = mode !== 'sector';
-  for (const [mesh, data] of [[yellow, yellowData], [blue, blueData], [green, greenData]]) {
+  for (const [mesh, data] of [[yellow, yellowData], [blue, blueData], [green, greenData], [sky, skyData]]) {
     mesh.visible = mainVisible;
     if (!mainVisible) continue;
     data.forEach((seat, index) => mesh.setMatrixAt(index, !seat.hidden && !placed.has(seat) ? seat.matrix : hiddenMatrix));
@@ -2184,7 +2212,7 @@ if (location.search.includes('debug')) {
     const hidden = [];
     let exportLegs;
     try {
-      for (const mesh of [yellow, blue, green]) mesh.geometry = detailSeatGeometry;
+      for (const mesh of [yellow, blue, green, sky]) mesh.geometry = detailSeatGeometry;
       exportLegs = new THREE.InstancedMesh(supportGeometry, detailLegs.material, seats.length);
       seats.forEach((seat, index) => exportLegs.setMatrixAt(index, seat.hidden ? hiddenMatrix : seat.matrix));
       scene.add(exportLegs);
@@ -2200,7 +2228,7 @@ if (location.search.includes('debug')) {
       return Number(await response.text());
     } finally {
       hidden.forEach(([object, visible]) => { object.visible = visible; });
-      for (const mesh of [yellow, blue, green]) mesh.geometry = lowGeometry;
+      for (const mesh of [yellow, blue, green, sky]) mesh.geometry = lowGeometry;
       if (exportLegs) scene.remove(exportLegs);
     }
   };
