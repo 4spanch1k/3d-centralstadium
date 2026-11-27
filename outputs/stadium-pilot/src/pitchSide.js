@@ -353,7 +353,7 @@ export function createApronDetails({ scene, farZ, anisotropy }) {
     parts.box(3.5, 0.08, 5.3, '#173c78', at(71.5), 0.69, -mirror - side * 1.5);
     parts.box(3.2, 0.05, 9.4, '#e8e9e2', at(70.5), 0.035, mirror + side * 3);
     parts.box(2.9, 0.06, 9.1, '#c4ad7c', at(70.5), 0.04, mirror + side * 3);
-    parts.box(1.3, 0.025, 15, '#486075', at(70.5), 0.036, mirror - side * 9.5);
+    parts.box(1.3, 0.025, 15, '#0f3866', at(70.5), 0.036, mirror - side * 9.5);
     parts.box(1.3, 0.032, 0.2, '#f2f2ec', at(70.5), 0.037, mirror - side * 3.2);
     for (const z of [-16, -2, 15]) {
       parts.box(0.92, 0.018, 0.92, '#4a5154', at(73), 0.03, z);

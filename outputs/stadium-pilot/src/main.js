@@ -334,7 +334,8 @@ trackNormal.wrapS = THREE.RepeatWrapping;
 trackNormal.wrapT = THREE.RepeatWrapping;
 trackNormal.repeat.set(0.5, 0.5);
 trackNormal.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
-const track = new THREE.MeshStandardMaterial({ color: '#405a70', roughness: 0.95, normalMap: trackNormal, normalScale: new THREE.Vector2(0.5, 0.5) });
+// Дорожка насыщенного синего, как на снимках 25.09.2025.
+const track = new THREE.MeshStandardMaterial({ color: '#0f3866', roughness: 0.95, normalMap: trackNormal, normalScale: new THREE.Vector2(0.5, 0.5) });
 weather(track, { stains: false });
 const white = material('#e8ead9');
 // Пластик кресел: на компьютерах с глянцевым лаковым слоем, ловит отражения неба.
@@ -721,6 +722,13 @@ flat(stadiumPath(TRACK_OUTER, new THREE.Shape()), stadiumPath(TRACK_INNER), 0.04
 const infield = material('#8e948f', 0.96);
 weather(infield, { stains: false, ao: 0 });
 flat(stadiumPath(TRACK_INNER, new THREE.Shape()), null, 0.02, infield);
+// Синие участки разбега крестом в секторах за воротами (форма по снимкам, размеры на глаз).
+for (const side of [-1, 1]) {
+  for (const [from, to, halfWidth] of [[55, TRACK_STRAIGHT + TRACK_INNER, 2.6], [60.5, 64.5, 23]]) {
+    const shape = new THREE.Shape([[from, -halfWidth], [to, -halfWidth], [to, halfWidth], [from, halfWidth]].map(([x, z]) => new THREE.Vector2(side * x, z)));
+    flat(shape, null, halfWidth > 10 ? 0.026 : 0.027, track);
+  }
+}
 createApronDetails({ scene, farZ: 52 * bowlScaleZ, anisotropy: pitchAnisotropy });
 for (let i = 0; i <= 8; i += 1) {
   flat(stadiumPath(TRACK_INNER + i * TRACK_LANE + 0.03, new THREE.Shape()), stadiumPath(TRACK_INNER + i * TRACK_LANE - 0.03), 0.07, white);
@@ -1382,8 +1390,10 @@ for (const x of [-52.5, 52.5]) {
 const scoreboardFrame = material('#b7bcb7');
 const scoreboardScreen = material('#151d1d');
 const scoreboardX = warpX(-99 * bowlScaleX);
-for (const z of [-4.5, 4.5]) box(1, 10, 1, scoreboardX, 5, z, scoreboardFrame);
-box(1.2, 7.6, 15, scoreboardX, 13.8, 0, scoreboardFrame);
+const SCOREBOARD_Y = 17.8;
+// Табло поднято над верхним рядом (он на 13,2 м) на двух бетонных пилонах, как на снимках 2025 года.
+for (const z of [-4.5, 4.5]) box(1.6, 14.2, 1.8, scoreboardX, 7.1, z, concrete);
+box(1.2, 7.6, 15, scoreboardX, SCOREBOARD_Y, 0, scoreboardFrame);
 const scoreCanvas = document.createElement('canvas');
 scoreCanvas.width = 2048;
 scoreCanvas.height = 960;
@@ -1411,9 +1421,9 @@ scoreTexture.colorSpace = THREE.SRGBColorSpace;
 scoreTexture.anisotropy = 8;
 const scoreLit = new THREE.MeshStandardMaterial({ map: scoreTexture, emissive: '#ffffff', emissiveMap: scoreTexture, emissiveIntensity: 1.2, roughness: 0.35 });
 // Тёмная рамка вокруг экрана табло.
-box(0.04, 7.2, 14.5, scoreboardX + 0.62, 13.8, 0, scoreboardScreen);
+box(0.04, 7.2, 14.5, scoreboardX + 0.62, SCOREBOARD_Y, 0, scoreboardScreen);
 const scoreScreen = new THREE.Mesh(new THREE.BoxGeometry(0.08, 6.4, 13.7), [scoreLit, scoreboardScreen, scoreboardScreen, scoreboardScreen, scoreboardScreen, scoreboardScreen]);
-scoreScreen.position.set(scoreboardX + 0.64, 13.8, 0);
+scoreScreen.position.set(scoreboardX + 0.64, SCOREBOARD_Y, 0);
 scene.add(scoreScreen);
 // Четыре мачты освещения по 40 м на восточном краю (модель из work/blender/create_floodlight_masts.py).
 // Светящиеся панели ламп (вечером ярче) повторяют положение ламп модели.
